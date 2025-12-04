@@ -1,0 +1,268 @@
+-- Check game
+local currentversion = "Garden Tower Defense-VTQAxD"
+
+-- call the library (executor must allow HttpGet & loadstring)
+local Mercury = loadstring(game:HttpGet("https://raw.githubusercontent.com/deeeity/mercury-lib/master/src.lua"))()
+
+-- Main frame
+local GUI = Mercury:Create{
+    Name = "Mercury",
+    Size = UDim2.fromOffset(600, 400),
+    Theme = Mercury.Themes.Dark,
+    Link = "https://github.com/deeeity/mercury-lib"
+}
+
+-- Local var
+local autojoinmap = false
+local autojoindojo = false
+local autodifficulty = false
+local autospeedchange = false
+local autoskipwaves = false
+local autorestart = false
+local recordedActions = {}
+local isRecording = false
+local isReplaying = false
+
+-- Farm tab Creation
+local farmTab = GUI:tab{
+    Name = "Auto Farm",
+    Icon = "rbxassetid://7734068321"
+}
+
+farmTab:toggle{
+    Name = "auto join map",
+    StartingState = false,
+    Description = "Automatically joins a map when loaded (only on specific PlaceId)",
+    Callback = function(state)
+        -- only allow enabling on the intended PlaceId
+        if state and game.PlaceId ~= 108533757090220 then
+            warn("Auto join map disabled: wrong PlaceId", game.PlaceId)
+            return
+        end
+
+        autojoinmap = state
+        if autojoinmap then
+            task.spawn(function()
+                while autojoinmap do
+                    local char = game.Players.LocalPlayer.Character
+                    if char then
+                        local pl = char:FindFirstChild("HumanoidRootPart")
+                        local humanoid = char:FindFirstChild("Humanoid")
+                        if pl and humanoid then
+                            local location = CFrame.new(82, 66, 784)
+                            humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+                            pl.CFrame = location
+                        end
+                    end
+                    task.wait(1)
+                end
+            end)
+        end
+    end
+}
+
+farmTab:toggle{
+    Name = "auto join dojo",
+    StartingState = false,
+    Description = "Automatically joins the dojo when loaded",
+    Callback = function(state)
+        autojoindojo = state
+        if autojoindojo then
+            task.spawn(function()
+                while autojoindojo do
+                    local args = {[1] = "map_dojo"}
+                    pcall(function()
+                        game:GetService("ReplicatedStorage").RemoteFunctions.LobbySetMap_5:InvokeServer(unpack(args))
+                    end)
+                    task.wait(1)
+                end
+            end)
+        end
+    end
+}
+
+farmTab:toggle{
+    Name = "auto difficulty",
+    StartingState = false,
+    Description = "auto sets difficulty to apocalypse",
+    Callback = function(state)
+        autodifficulty = state
+        if autodifficulty then
+            task.spawn(function()
+                while autodifficulty do
+                    local args = {
+                        [1] = "dif_apocalypse"
+                    }
+                    pcall(function()
+                        game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("PlaceDifficultyVote"):InvokeServer(unpack(args))
+                    end)
+                    task.wait(1)
+                end
+            end)
+        end
+    end
+}
+
+farmTab:toggle{
+    Name = "auto change speed",
+    StartingState = false,
+    Description = "Automatically Changes game speed to 2x",
+    Callback = function(state)
+        autospeedchange = state
+        if autospeedchange then
+            task.spawn(function()
+                while autospeedchange do
+                    pcall(function()
+                        local args = {[1] = 2}
+                        game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("ChangeTickSpeed"):InvokeServer(unpack(args))
+                    end)
+                    task.wait(1)
+                end
+            end)
+        end
+    end
+}
+
+farmTab:toggle{
+    Name = "auto skip waves",
+    StartingState = false,
+    Description = "Auto skip waves",
+    Callback = function(state)
+        autoskipwaves = state
+        if autoskipwaves then
+            task.spawn(function()
+                while autoskipwaves do
+                    pcall(function()
+                        local args = {[1] = "y"}
+                        game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("SkipWave"):InvokeServer(unpack(args))
+                    end)
+                    task.wait(1)
+                end
+            end)
+        end
+    end
+}
+
+farmTab:toggle{
+    Name = "auto restart",
+    StartingState = false,
+    Description = "Auto restart game",
+    Callback = function(state)
+        autorestart = state
+        if autorestart then
+            task.spawn(function()
+                while autorestart do
+                    pcall(function()
+                        game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("RestartGame"):InvokeServer()
+                    end)
+                    task.wait(5)
+                end
+            end)
+        end
+    end
+}
+
+farmTab:toggle{
+    Name = "record dojo actions",
+    StartingState = false,
+    Description = "Record your unit placements and upgrades",
+    Callback = function(state)
+        isRecording = state
+        if isRecording then
+            recordedActions = {}
+            print("=== Recording started - Place units and upgrade towers ===")
+            
+            task.spawn(function()
+                local remoteRF = game:GetService("ReplicatedStorage"):FindFirstChild("RemoteFunctions")
+                if not remoteRF then warn("RemoteFunctions not found"); return end
+                
+                local placeRemote = remoteRF:FindFirstChild("PlaceUnit")
+                local upgradeRemote = remoteRF:FindFirstChild("UpgradeUnit")
+                
+                if placeRemote then
+                    local oldPlaceFunc = placeRemote.InvokeServer
+                    placeRemote.InvokeServer = function(self, ...)
+                        if isRecording then
+                            local args = {...}
+                            table.insert(recordedActions, {
+                                type = "place",
+                                args = args
+                            })
+                            print("Recorded placement:", args[1], "PathIndex:", args[2] and args[2].PathIndex or "?")
+                        end
+                        return oldPlaceFunc(self, ...)
+                    end
+                end
+                
+                if upgradeRemote then
+                    local oldUpgradeFunc = upgradeRemote.InvokeServer
+                    upgradeRemote.InvokeServer = function(self, ...)
+                        if isRecording then
+                            local args = {...}
+                            table.insert(recordedActions, {
+                                type = "upgrade",
+                                args = args
+                            })
+                            print("Recorded upgrade: tower", args[1])
+                        end
+                        return oldUpgradeFunc(self, ...)
+                    end
+                end
+            end)
+        else
+            print("=== Recording stopped ===")
+            print("Total actions recorded:", #recordedActions)
+        end
+    end
+}
+
+farmTab:toggle{
+    Name = "replay dojo actions",
+    StartingState = false,
+    Description = "Replay recorded actions automatically",
+    Callback = function(state)
+        isReplaying = state
+        if isReplaying then
+            if #recordedActions == 0 then
+                warn("No actions recorded! Enable 'record dojo actions' first.")
+                return
+            end
+            
+            task.spawn(function()
+                print("=== Replay started - ", #recordedActions, "actions ===")
+                local remoteRF = game:GetService("ReplicatedStorage"):FindFirstChild("RemoteFunctions")
+                if not remoteRF then warn("RemoteFunctions not found"); return end
+                
+                local placeRemote = remoteRF:FindFirstChild("PlaceUnit")
+                local upgradeRemote = remoteRF:FindFirstChild("UpgradeUnit")
+                
+                while isReplaying do
+                    for i, action in ipairs(recordedActions) do
+                        if not isReplaying then break end
+                        
+                        if action.type == "place" and placeRemote then
+                            pcall(function()
+                                placeRemote:InvokeServer(unpack(action.args))
+                                print("Replayed placement", i)
+                            end)
+                        elseif action.type == "upgrade" and upgradeRemote then
+                            pcall(function()
+                                upgradeRemote:InvokeServer(unpack(action.args))
+                                print("Replayed upgrade", i)
+                            end)
+                        end
+                        
+                        task.wait(0.5)
+                    end
+                    
+                    print("=== Replay cycle complete, repeating... ===")
+                    task.wait(1)
+                end
+                
+                print("=== Replay stopped ===")
+            end)
+        end
+    end
+}
+
+print("GTD script loaded successfully")
