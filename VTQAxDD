@@ -19,9 +19,7 @@ local autodifficulty = false
 local autospeedchange = false
 local autoskipwaves = false
 local autorestart = false
-local recordedActions = {}
-local isRecording = false
-local isReplaying = false
+local autowindojo = false
 
 -- Farm tab Creation
 local farmTab = GUI:tab{
@@ -163,105 +161,120 @@ farmTab:toggle{
 }
 
 farmTab:toggle{
-    Name = "record dojo actions",
+    Name = "auto win dojo",
     StartingState = false,
-    Description = "Record your unit placements and upgrades",
+    Description = "Auto place Rafflesia (1250 each) and upgrade tower (8000) - cash based",
     Callback = function(state)
-        isRecording = state
-        if isRecording then
-            recordedActions = {}
-            print("=== Recording started - Place units and upgrade towers ===")
-            
-            task.spawn(function()
-                local remoteRF = game:GetService("ReplicatedStorage"):FindFirstChild("RemoteFunctions")
-                if not remoteRF then warn("RemoteFunctions not found"); return end
-                
-                local placeRemote = remoteRF:FindFirstChild("PlaceUnit")
-                local upgradeRemote = remoteRF:FindFirstChild("UpgradeUnit")
-                
-                if placeRemote then
-                    local oldPlaceFunc = placeRemote.InvokeServer
-                    placeRemote.InvokeServer = function(self, ...)
-                        if isRecording then
-                            local args = {...}
-                            table.insert(recordedActions, {
-                                type = "place",
-                                args = args
-                            })
-                            print("Recorded placement:", args[1], "PathIndex:", args[2] and args[2].PathIndex or "?")
-                        end
-                        return oldPlaceFunc(self, ...)
-                    end
-                end
-                
-                if upgradeRemote then
-                    local oldUpgradeFunc = upgradeRemote.InvokeServer
-                    upgradeRemote.InvokeServer = function(self, ...)
-                        if isRecording then
-                            local args = {...}
-                            table.insert(recordedActions, {
-                                type = "upgrade",
-                                args = args
-                            })
-                            print("Recorded upgrade: tower", args[1])
-                        end
-                        return oldUpgradeFunc(self, ...)
-                    end
-                end
-            end)
-        else
-            print("=== Recording stopped ===")
-            print("Total actions recorded:", #recordedActions)
-        end
-    end
-}
+        autowindojo = state
+        if not autowindojo then return end
 
-farmTab:toggle{
-    Name = "replay dojo actions",
-    StartingState = false,
-    Description = "Replay recorded actions automatically",
-    Callback = function(state)
-        isReplaying = state
-        if isReplaying then
-            if #recordedActions == 0 then
-                warn("No actions recorded! Enable 'record dojo actions' first.")
+        task.spawn(function()
+            local Players = game:GetService("Players")
+            local pl = Players.LocalPlayer
+            if not pl then warn("auto win dojo: LocalPlayer not found"); return end
+
+            -- Find cash object
+            local cashObj
+            local attempts = 0
+            while autowindojo and attempts < 120 do
+                local ls = pl:FindFirstChild("leaderstats")
+                cashObj = ls and ls:FindFirstChild("Cash")
+                if cashObj then break end
+                attempts = attempts + 1
+                task.wait(0.5)
+            end
+            if not cashObj then
+                warn("auto win dojo: leaderstats->Cash not found on client; aborting")
                 return
             end
-            
-            task.spawn(function()
-                print("=== Replay started - ", #recordedActions, "actions ===")
-                local remoteRF = game:GetService("ReplicatedStorage"):FindFirstChild("RemoteFunctions")
-                if not remoteRF then warn("RemoteFunctions not found"); return end
-                
-                local placeRemote = remoteRF:FindFirstChild("PlaceUnit")
-                local upgradeRemote = remoteRF:FindFirstChild("UpgradeUnit")
-                
-                while isReplaying do
-                    for i, action in ipairs(recordedActions) do
-                        if not isReplaying then break end
-                        
-                        if action.type == "place" and placeRemote then
-                            pcall(function()
-                                placeRemote:InvokeServer(unpack(action.args))
-                                print("Replayed placement", i)
-                            end)
-                        elseif action.type == "upgrade" and upgradeRemote then
-                            pcall(function()
-                                upgradeRemote:InvokeServer(unpack(action.args))
-                                print("Replayed upgrade", i)
-                            end)
-                        end
-                        
-                        task.wait(0.5)
+
+            local function getCash()
+                return tonumber(cashObj.Value) or 0
+            end
+
+            local function waitForCash(minCash)
+                -- immediate pass if we already have enough
+                if getCash() >= minCash then return true end
+                -- real-time wait using Changed event
+                local fulfilled = false
+                local conn
+                conn = cashObj.Changed:Connect(function(newVal)
+                    if tonumber(newVal) and tonumber(newVal) >= minCash then
+                        fulfilled = true
+                        if conn and conn.Connected then conn:Disconnect() end
                     end
-                    
-                    print("=== Replay cycle complete, repeating... ===")
-                    task.wait(1)
+                end)
+                -- wait until cash threshold met or toggle disabled
+                while autowindojo and not fulfilled do
+                    task.wait(0.1)
                 end
-                
-                print("=== Replay stopped ===")
-            end)
-        end
+                if conn and conn.Connected then conn:Disconnect() end
+                return autowindojo and fulfilled
+            end
+
+            local remoteRF = game:GetService("ReplicatedStorage"):FindFirstChild("RemoteFunctions")
+            if not remoteRF then warn("auto win dojo: RemoteFunctions not found"); return end
+            local placeRemote = remoteRF:FindFirstChild("PlaceUnit")
+            local upgradeRemote = remoteRF:FindFirstChild("UpgradeUnit")
+            if not placeRemote or not upgradeRemote then
+                warn("auto win dojo: required remotes missing (PlaceUnit/UpgradeUnit)")
+                return
+            end
+
+            -- main repeating sequence
+            while autowindojo do
+                -- Unit 1 on Path 1 (1250 cash)
+                if not waitForCash(1250) then break end
+                pcall(function()
+                    placeRemote:InvokeServer("unit_rafflesia", {
+                        Valid = true, PathIndex = 1,
+                        Position = Vector3.new(29.287548065185547, -21.749000549316406, -21.569156646728516),
+                        DistanceAlongPath = 46.49023048897571,
+                        Rotation = 180,
+                        CF = CFrame.new(29.287548065185547, -21.749000549316406, -21.569156646728516) * CFrame.Angles(0, -0.3936169147491455, -0)
+                    })
+                end)
+                task.wait(0.5)
+                if not autowindojo then break end
+
+                -- Unit 2 on Path 2 (1250 cash)
+                if not waitForCash(1250) then break end
+                pcall(function()
+                    placeRemote:InvokeServer("unit_rafflesia", {
+                        Valid = true, PathIndex = 2,
+                        Position = Vector3.new(-38.87824630737305, -21.7496395111084, 18.938264846801758),
+                        DistanceAlongPath = 88.56003311901512,
+                        Rotation = 180,
+                        CF = CFrame.new(-38.87824630737305, -21.7496395111084, 18.938264846801758) * CFrame.Angles(0, -0.19589854776859283, -0)
+                    })
+                end)
+                task.wait(0.5)
+                if not autowindojo then break end
+
+                -- Unit 3 on Path 1 (1250 cash)
+                if not waitForCash(1250) then break end
+                pcall(function()
+                    placeRemote:InvokeServer("unit_rafflesia", {
+                        Valid = true, PathIndex = 1,
+                        Position = Vector3.new(43.06715393066406, -21.75, -46.14543151855469),
+                        DistanceAlongPath = 17.911519790899195,
+                        Rotation = 180,
+                        CF = CFrame.new(43.06715393066406, -21.75, -46.14543151855469) * CFrame.Angles(0, -0.7827028632164001, -0)
+                    })
+                end)
+                task.wait(0.5)
+                if not autowindojo then break end
+
+                -- Upgrade tower 194 (8000 cash)
+                if not waitForCash(8000) then break end
+                pcall(function()
+                    upgradeRemote:InvokeServer(194)
+                end)
+                task.wait(1)
+            end
+
+            print("Auto win dojo stopped/cleaned up (real-time)")
+        end)
     end
 }
 
