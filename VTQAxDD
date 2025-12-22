@@ -1,281 +1,256 @@
 -- Check game
 local currentversion = "Garden Tower Defense-VTQAxD"
 
--- call the library (executor must allow HttpGet & loadstring)
-local Mercury = loadstring(game:HttpGet("https://raw.githubusercontent.com/deeeity/mercury-lib/master/src.lua"))()
 
--- Main frame
-local GUI = Mercury:Create{
-    Name = "Mercury",
-    Size = UDim2.fromOffset(600, 400),
-    Theme = Mercury.Themes.Dark,
-    Link = "https://github.com/deeeity/mercury-lib"
-}
+
+-- Anti-AFK setup
+local virtualUser = game:GetService("VirtualUser")
+local antiAfkEnabled = true
+local timeInAfk = 0
+
+local function startAfkTimer()
+    spawn(function()
+        while antiAfkEnabled do
+            wait(1)
+            timeInAfk = timeInAfk + 1
+        end
+    end)
+end
+
+local function startAntiAfk()
+    spawn(function()
+        while antiAfkEnabled do
+            wait(60)
+            virtualUser:CaptureController()
+            virtualUser:ClickButton2(Vector2.new())
+        end
+    end)
+end
+
+-- Start anti-AFK
+startAntiAfk()
+startAfkTimer()
 
 -- Local var
-local autojoinmap = false
-local autojoindojo = false
-local autodifficulty = false
-local autospeedchange = false
-local autoskipwaves = false
-local autorestart = false
-local autowindojo = false
+local autojoinmap = true
+local autojoindojo = true
+local autodifficulty = true
+local autospeedchange = true
+local autoskipwaves = true
+local autorestart = true
+local autowindojo = true
 
--- Farm tab Creation
-local farmTab = GUI:tab{
-    Name = "Auto Farm",
-    Icon = "rbxassetid://7734068321"
+-- Rafflesia tracking state
+local rafflesiaCount = 0  -- Track number of Rafflesias placed
+local rafflesiaConfigs = {
+    {
+        id = 1,
+        pathIndex = 1,
+        position = Vector3.new(99.77379608154297, 1.244499921798706, -49.57455825805664),
+        distanceAlongPath = 59.20556225586817,
+        cf = CFrame.new(99.77379608154297, 1.244499921798706, -49.57455825805664),
+        rotation = 180
+    },
+    {
+        id = 2,
+        pathIndex = 2,
+        position = Vector3.new(49.54217529296875, 1.244499921798706, 69.6724853515625),
+        distanceAlongPath = 95.85869268360022,
+        cf = CFrame.new(49.54217529296875, 1.244499921798706, 69.6724853515625),
+        rotation = 180
+    },
+    {
+        id = 3,
+        pathIndex = 3,
+        position = Vector3.new(-82.18751525878906, 1.244255542755127, 92.75767517089844),
+        distanceAlongPath = 29.82133372894933,
+        cf = CFrame.new(-82.18751525878906, 1.244255542755127, 92.75767517089844),
+        rotation = 180
+    },
+    {
+        id = 4,
+        pathIndex = 4,
+        position = Vector3.new(-80.15360260009766, 1.244499921798706, -77.98281860351562),
+        distanceAlongPath = 62.72888104365726,
+        cf = CFrame.new(-80.15360260009766, 1.244499921798706, -77.98281860351562),
+        rotation = 180
+    }
 }
 
-farmTab:toggle{
-    Name = "auto join map",
-    StartingState = false,
-    Description = "Automatically joins a map when loaded (only on specific PlaceId)",
-    Callback = function(state)
-        -- only allow enabling on the intended PlaceId
-        if state and game.PlaceId ~= 108533757090220 then
-            warn("Auto join map disabled: wrong PlaceId", game.PlaceId)
-            return
-        end
+-- Get current cash
+local function getCash()
+    local cashDisplay = game:GetService("Players").LocalPlayer.PlayerGui.GameGui.Screen.Bottom.CurrencyDisplay.Cash
+    if cashDisplay then
+        local cashText = cashDisplay.Text or ""
+        print("Cash text: " .. cashText)  -- Debug: see what the text looks like
+        
+        -- Remove commas and any non-digit characters except the number
+        local cleanText = string.gsub(cashText, "[^0-9]", "")
+        local cashValue = tonumber(cleanText) or 0
+        
+        print("Cleaned text: " .. cleanText .. " | Final value: " .. cashValue)  -- Debug output
+        return cashValue
+    end
+    return 0
+end
 
-        autojoinmap = state
-        if autojoinmap then
-            task.spawn(function()
-                while autojoinmap do
-                    local char = game.Players.LocalPlayer.Character
-                    if char then
-                        local pl = char:FindFirstChild("HumanoidRootPart")
-                        local humanoid = char:FindFirstChild("Humanoid")
-                        if pl and humanoid then
-                            local location = CFrame.new(82, 66, 784)
-                            humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
-                            pl.CFrame = location
-                        end
+-- Function to randomize position based on distance along path
+local function randomizePosition(config)
+    local randomOffset = (math.random() - 0.5) * 0.1 * config.distanceAlongPath -- ±5%
+    local newDistance = config.distanceAlongPath + randomOffset
+    
+    -- Apply small random offset to position as well
+    local posOffset = Vector3.new(
+        (math.random() - 0.5) * 2,
+        0,
+        (math.random() - 0.5) * 2
+    )
+    
+    return {
+        Valid = true,
+        PathIndex = config.pathIndex,
+        Position = config.position + posOffset,
+        DistanceAlongPath = newDistance,
+        CF = CFrame.new(config.position + posOffset),
+        Rotation = config.rotation
+    }
+end
+
+-- Auto join map
+if autojoinmap then
+    task.spawn(function()
+        while autojoinmap do
+            if game.PlaceId == 108533757090220 then
+                local char = game.Players.LocalPlayer.Character
+                if char then
+                    local pl = char:FindFirstChild("HumanoidRootPart")
+                    local humanoid = char:FindFirstChild("Humanoid")
+                    if pl and humanoid then
+                        local location = CFrame.new(82, 66, 784)
+                        humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+                        pl.CFrame = location
                     end
-                    task.wait(1)
                 end
-            end)
+            end
+            task.wait(1)
         end
-    end
-}
+    end)
+end
 
-farmTab:toggle{
-    Name = "auto join dojo",
-    StartingState = false,
-    Description = "Automatically joins the dojo when loaded",
-    Callback = function(state)
-        autojoindojo = state
-        if autojoindojo then
-            task.spawn(function()
-                while autojoindojo do
-                    local args = {[1] = "map_dojo"}
-                    pcall(function()
-                        game:GetService("ReplicatedStorage").RemoteFunctions.LobbySetMap_5:InvokeServer(unpack(args))
-                    end)
-                    task.wait(1)
-                end
+-- Auto join christmas
+if autojoindojo then
+    task.spawn(function()
+        while autojoindojo do
+            local args = {[1] = "map_christmas"}
+            pcall(function()
+                game:GetService("ReplicatedStorage").RemoteFunctions.LobbySetMap_5:InvokeServer(unpack(args))
             end)
+            task.wait(1)
         end
-    end
-}
+    end)
+end
 
-farmTab:toggle{
-    Name = "auto difficulty",
-    StartingState = false,
-    Description = "auto sets difficulty to apocalypse",
-    Callback = function(state)
-        autodifficulty = state
-        if autodifficulty then
-            task.spawn(function()
-                while autodifficulty do
+-- Auto difficulty
+if autodifficulty then
+    task.spawn(function()
+        while autodifficulty do
+            pcall(function()
+                local args = {[1] = "dif_apocalypse"}
+                game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("PlaceDifficultyVote"):InvokeServer(unpack(args))
+            end)
+            task.wait(1)
+        end
+    end)
+end
+
+-- Auto change speed
+if autospeedchange then
+    task.spawn(function()
+        while autospeedchange do
+            pcall(function()
+                local args = {[1] = 3}
+                game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("ChangeTickSpeed"):InvokeServer(unpack(args))
+            end)
+            task.wait(1)
+        end
+    end)
+end
+
+-- Auto skip waves
+if autoskipwaves then
+    task.spawn(function()
+        while autoskipwaves do
+            pcall(function()
+                local args = {[1] = "y"}
+                game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("SkipWave"):InvokeServer(unpack(args))
+                print("Wave skipped")
+            end)
+            task.wait(0.2)
+        end
+    end)
+end
+
+-- Auto restart
+if autorestart then
+    task.spawn(function()
+        while autorestart do
+            pcall(function()
+                game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("RestartGame"):InvokeServer()
+            end)
+            task.wait(5)
+        end
+    end)
+end
+
+-- Auto win christmas
+if autowindojo then
+    rafflesiaCount = 0  -- Reset counter when toggle is turned ON
+
+    task.spawn(function()
+        while autowindojo do
+            local cash = getCash()
+            
+            -- If cash is very low and all rafflesias placed, reset counter
+            if cash < 100 and rafflesiaCount == #rafflesiaConfigs then
+                rafflesiaCount = 0
+                print("Cash reset, ready to place rafflesias again")
+            end
+            
+            -- Check if we can place next Rafflesia
+            if cash >= 1250 and rafflesiaCount < #rafflesiaConfigs then
+                local cashBefore = cash
+                rafflesiaCount = rafflesiaCount + 1
+                local config = rafflesiaConfigs[rafflesiaCount]
+                
+                pcall(function()
+                    local randomizedPlacement = randomizePosition(config)
                     local args = {
-                        [1] = "dif_apocalypse"
+                        "unit_rafflesia",
+                        randomizedPlacement
                     }
-                    pcall(function()
-                        game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("PlaceDifficultyVote"):InvokeServer(unpack(args))
-                    end)
-                    task.wait(1)
-                end
-            end)
-        end
-    end
-}
-
-farmTab:toggle{
-    Name = "auto change speed",
-    StartingState = false,
-    Description = "Automatically Changes game speed to 2x",
-    Callback = function(state)
-        autospeedchange = state
-        if autospeedchange then
-            task.spawn(function()
-                while autospeedchange do
-                    pcall(function()
-                        local args = {[1] = 2}
-                        game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("ChangeTickSpeed"):InvokeServer(unpack(args))
-                    end)
-                    task.wait(1)
-                end
-            end)
-        end
-    end
-}
-
-farmTab:toggle{
-    Name = "auto skip waves",
-    StartingState = false,
-    Description = "Auto skip waves",
-    Callback = function(state)
-        autoskipwaves = state
-        if autoskipwaves then
-            task.spawn(function()
-                while autoskipwaves do
-                    pcall(function()
-                        local args = {[1] = "y"}
-                        game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("SkipWave"):InvokeServer(unpack(args))
-                    end)
-                    task.wait(1)
-                end
-            end)
-        end
-    end
-}
-
-farmTab:toggle{
-    Name = "auto restart",
-    StartingState = false,
-    Description = "Auto restart game",
-    Callback = function(state)
-        autorestart = state
-        if autorestart then
-            task.spawn(function()
-                while autorestart do
-                    pcall(function()
-                        game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("RestartGame"):InvokeServer()
-                    end)
-                    task.wait(5)
-                end
-            end)
-        end
-    end
-}
-
-farmTab:toggle{
-    Name = "auto win dojo",
-    StartingState = false,
-    Description = "Auto place Rafflesia (1250 each) and upgrade tower (8000) - cash based",
-    Callback = function(state)
-        autowindojo = state
-        if not autowindojo then return end
-
-        task.spawn(function()
-            local Players = game:GetService("Players")
-            local pl = Players.LocalPlayer
-            if not pl then warn("auto win dojo: LocalPlayer not found"); return end
-
-            -- Find cash object
-            local cashObj
-            local attempts = 0
-            while autowindojo and attempts < 120 do
-                local ls = pl:FindFirstChild("leaderstats")
-                cashObj = ls and ls:FindFirstChild("Cash")
-                if cashObj then break end
-                attempts = attempts + 1
-                task.wait(0.5)
-            end
-            if not cashObj then
-                warn("auto win dojo: leaderstats->Cash not found on client; aborting")
-                return
-            end
-
-            local function getCash()
-                return tonumber(cashObj.Value) or 0
-            end
-
-            local function waitForCash(minCash)
-                -- immediate pass if we already have enough
-                if getCash() >= minCash then return true end
-                -- real-time wait using Changed event
-                local fulfilled = false
-                local conn
-                conn = cashObj.Changed:Connect(function(newVal)
-                    if tonumber(newVal) and tonumber(newVal) >= minCash then
-                        fulfilled = true
-                        if conn and conn.Connected then conn:Disconnect() end
-                    end
+                    game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("PlaceUnit"):InvokeServer(unpack(args))
+                    print("Attempting to place Rafflesia ID " .. config.id .. " (Cash before: " .. cashBefore .. ", Distance: " .. randomizedPlacement.DistanceAlongPath .. ")")
                 end)
-                -- wait until cash threshold met or toggle disabled
-                while autowindojo and not fulfilled do
-                    task.wait(0.1)
-                end
-                if conn and conn.Connected then conn:Disconnect() end
-                return autowindojo and fulfilled
-            end
-
-            local remoteRF = game:GetService("ReplicatedStorage"):FindFirstChild("RemoteFunctions")
-            if not remoteRF then warn("auto win dojo: RemoteFunctions not found"); return end
-            local placeRemote = remoteRF:FindFirstChild("PlaceUnit")
-            local upgradeRemote = remoteRF:FindFirstChild("UpgradeUnit")
-            if not placeRemote or not upgradeRemote then
-                warn("auto win dojo: required remotes missing (PlaceUnit/UpgradeUnit)")
-                return
-            end
-
-            -- main repeating sequence
-            while autowindojo do
-                -- Unit 1 on Path 1 (1250 cash)
-                if not waitForCash(1250) then break end
-                pcall(function()
-                    placeRemote:InvokeServer("unit_rafflesia", {
-                        Valid = true, PathIndex = 1,
-                        Position = Vector3.new(29.287548065185547, -21.749000549316406, -21.569156646728516),
-                        DistanceAlongPath = 46.49023048897571,
-                        Rotation = 180,
-                        CF = CFrame.new(29.287548065185547, -21.749000549316406, -21.569156646728516) * CFrame.Angles(0, -0.3936169147491455, -0)
-                    })
-                end)
-                task.wait(0.5)
-                if not autowindojo then break end
-
-                -- Unit 2 on Path 2 (1250 cash)
-                if not waitForCash(1250) then break end
-                pcall(function()
-                    placeRemote:InvokeServer("unit_rafflesia", {
-                        Valid = true, PathIndex = 2,
-                        Position = Vector3.new(-38.87824630737305, -21.7496395111084, 18.938264846801758),
-                        DistanceAlongPath = 88.56003311901512,
-                        Rotation = 180,
-                        CF = CFrame.new(-38.87824630737305, -21.7496395111084, 18.938264846801758) * CFrame.Angles(0, -0.19589854776859283, -0)
-                    })
-                end)
-                task.wait(0.5)
-                if not autowindojo then break end
-
-                -- Unit 3 on Path 1 (1250 cash)
-                if not waitForCash(1250) then break end
-                pcall(function()
-                    placeRemote:InvokeServer("unit_rafflesia", {
-                        Valid = true, PathIndex = 1,
-                        Position = Vector3.new(43.06715393066406, -21.75, -46.14543151855469),
-                        DistanceAlongPath = 17.911519790899195,
-                        Rotation = 180,
-                        CF = CFrame.new(43.06715393066406, -21.75, -46.14543151855469) * CFrame.Angles(0, -0.7827028632164001, -0)
-                    })
-                end)
-                task.wait(0.5)
-                if not autowindojo then break end
-
-                -- Upgrade tower 194 (8000 cash)
-                if not waitForCash(8000) then break end
-                pcall(function()
-                    upgradeRemote:InvokeServer(194)
-                end)
+                
+                -- Wait and verify the money decreased
                 task.wait(1)
+                local cashAfter = getCash()
+                
+                if cashAfter < cashBefore - 1000 then
+                    print("✓ Rafflesia ID " .. config.id .. " placed successfully! Cash after: " .. cashAfter)
+                    task.wait(3)  -- Wait for money to accumulate before next placement
+                else
+                    -- Placement failed, revert counter
+                    rafflesiaCount = rafflesiaCount - 1
+                    print("✗ Rafflesia ID " .. config.id .. " placement failed. Retrying...")
+                    task.wait(1)
+                end
             end
 
-            print("Auto win dojo stopped/cleaned up (real-time)")
-        end)
-    end
-}
+            task.wait(1)
+        end
+    end)
+end
 
 print("GTD script loaded successfully")
+print("Anti-AFK enabled")
