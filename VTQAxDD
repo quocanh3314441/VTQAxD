@@ -1,7 +1,10 @@
 -- Check game
 local currentversion = "Garden Tower Defense-VTQAxD"
 
-
+-- Disable 3D rendering only if not in lobby
+if game.PlaceId ~= 108533757090220 then
+    game:GetService("RunService"):Set3dRenderingEnabled(false)
+end
 
 -- Anti-AFK setup
 local virtualUser = game:GetService("VirtualUser")
