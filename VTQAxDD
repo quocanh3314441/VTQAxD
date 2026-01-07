@@ -1,11 +1,18 @@
+-- Run graphics optimization automatically
+autoSetLowestGraphic()
+-- Automatically set graphics to lowest
+local function autoSetLowestGraphic()
+    local args = {
+        [1] = "st_graphics",
+        [2] = 2
+    }
+    game:GetService("ReplicatedStorage").RemoteFunctions.ChangeSetting:InvokeServer(unpack(args))
+end
 -- Check game
 local currentversion = "Garden Tower Defense-VTQAxD"
 
--- Disable 3D rendering only if not in lobby
-if game.PlaceId ~= 108533757090220 then
+-- Disable 3D rendering
     game:GetService("RunService"):Set3dRenderingEnabled(false)
-end
-
 -- Anti-AFK setup
 local virtualUser = game:GetService("VirtualUser")
 local antiAfkEnabled = true
@@ -99,16 +106,17 @@ end
 
 -- Function to randomize position based on distance along path
 local function randomizePosition(config)
-    local randomOffset = (math.random() - 0.5) * 0.1 * config.distanceAlongPath -- ±5%
+    local randomOffset = (math.random() - 0.5) * 0.04 * config.distanceAlongPath -- ±2%
     local newDistance = config.distanceAlongPath + randomOffset
-    
-    -- Apply small random offset to position as well
+
+    -- Apply small random offset to position as well (±2% of distanceAlongPath)
+    local offsetAmount = 0.02 * config.distanceAlongPath
     local posOffset = Vector3.new(
-        (math.random() - 0.5) * 2,
+        (math.random() - 0.5) * 2 * offsetAmount,
         0,
-        (math.random() - 0.5) * 2
+        (math.random() - 0.5) * 2 * offsetAmount
     )
-    
+
     return {
         Valid = true,
         PathIndex = config.pathIndex,
