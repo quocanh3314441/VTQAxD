@@ -1,18 +1,11 @@
--- Run graphics optimization automatically
-autoSetLowestGraphic()
--- Automatically set graphics to lowest
-local function autoSetLowestGraphic()
-    local args = {
-        [1] = "st_graphics",
-        [2] = 2
-    }
-    game:GetService("ReplicatedStorage").RemoteFunctions.ChangeSetting:InvokeServer(unpack(args))
-end
 -- Check game
 local currentversion = "Garden Tower Defense-VTQAxD"
 
 -- Disable 3D rendering
+if game.PlaceId ~= 108533757090220 then
     game:GetService("RunService"):Set3dRenderingEnabled(false)
+end
+
 -- Anti-AFK setup
 local virtualUser = game:GetService("VirtualUser")
 local antiAfkEnabled = true
