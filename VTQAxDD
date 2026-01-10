@@ -139,7 +139,6 @@ if autoRestart then
     end)
 end
 
--- Rafflesia placement config
 local rafflesiaConfigs = {
     {
         id = 1,
@@ -175,6 +174,29 @@ local rafflesiaConfigs = {
     }
 }
 
+-- Function to randomize position based on distance along path
+local function randomizePosition(config)
+    local randomOffset = (math.random() - 0.5) * 0.02 * config.distanceAlongPath -- ±2%
+    local newDistance = config.distanceAlongPath + randomOffset
+
+    -- Apply small random offset to position as well (±2% of distanceAlongPath)
+    local offsetAmount = 0.02 * config.distanceAlongPath
+    local posOffset = Vector3.new(
+        (math.random() - 0.5) * 2 * offsetAmount,
+        0,
+        (math.random() - 0.5) * 2 * offsetAmount
+    )
+
+    return {
+        Valid = true,
+        PathIndex = config.pathIndex,
+        Position = config.position + posOffset,
+        DistanceAlongPath = newDistance,
+        CF = CFrame.new(config.position + posOffset),
+        Rotation = config.rotation
+    }
+end
+
 -- Get current cash
 local function getCash()
     local cashDisplay = game:GetService("Players").LocalPlayer.PlayerGui.GameGui.Screen.Bottom.CurrencyDisplay.Cash
@@ -186,7 +208,6 @@ local function getCash()
     return 0
 end
 
--- Auto win christmas (Rafflesia placement)
 if autoWinDojo then
     local rafflesiaCount = 0
     task.spawn(function()
@@ -197,20 +218,14 @@ if autoWinDojo then
             end
             if cash >= 1250 and rafflesiaCount < #rafflesiaConfigs then
                 local config = rafflesiaConfigs[rafflesiaCount + 1]
+                local randomizedPlacement = randomizePosition(config)
                 pcall(function()
                     local args = {
                         "unit_rafflesia",
-                        {
-                            Valid = true,
-                            PathIndex = config.pathIndex,
-                            Position = config.position,
-                            DistanceAlongPath = config.distanceAlongPath,
-                            CF = config.cf,
-                            Rotation = config.rotation
-                        }
+                        randomizedPlacement
                     }
                     game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("PlaceUnit"):InvokeServer(unpack(args))
-                    print("Placed Rafflesia ID " .. config.id)
+                    print("Placed Rafflesia ID " .. config.id .. " at randomized position.")
                 end)
                 rafflesiaCount = rafflesiaCount + 1
                 task.wait(3)
