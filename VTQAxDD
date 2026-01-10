@@ -9,9 +9,37 @@ local autoSkipWaves = true
 local autoRestart = true
 local autoWinDojo = true
 
--- Disable 3D rendering in lobby
 if game.PlaceId ~= 108533757090220 then
     game:GetService("RunService"):Set3dRenderingEnabled(false)
+    -- Auto set difficulty to apocalypse in other places
+    local autoSetDifficulty = true
+    if autoSetDifficulty then
+        task.spawn(function()
+            while autoSetDifficulty do
+                pcall(function()
+                    local args = {"dif_apocalypse"}
+                    game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("PlaceDifficultyVote"):InvokeServer(unpack(args))
+                    print("Auto-set difficulty to apocalypse")
+                end)
+                task.wait(2)
+            end
+        end)
+    end
+else
+    -- Auto join Christmas map with apocalypse difficulty (2-in-1)
+    local autoJoinChristmas = true
+    if autoJoinChristmas then
+        task.spawn(function()
+            while autoJoinChristmas do
+                pcall(function()
+                    local args = {"map_christmas", "dif_apocalypse"}
+                    game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("LobbySetMap_5"):InvokeServer(unpack(args))
+                    print("Auto-joined Christmas map with apocalypse difficulty")
+                end)
+                task.wait(2)
+            end
+        end)
+    end
 end
 
 -- Anti-AFK
