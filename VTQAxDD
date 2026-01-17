@@ -1,239 +1,145 @@
--- Garden Tower Defense – Auto Christmas Map + Apocalypse Difficulty (2-in-1)
--- Place in a LocalScript (StarterPlayerScripts or similar)
+-- Auto ban and roll for Mango Cluster (Crystal box)
+local placeId = 108533757090220
 
--- SETTINGS
-local autoJoinMap = true
-local autoJoinChristmas = true
-local autoSpeedChange = true
-local autoSkipWaves = true
-local autoRestart = true
-local autoWinDojo = true
+-- Disable 3D rendering
+game:GetService("RunService"):Set3dRenderingEnabled(false)
+print("3D Rendering disabled")
 
-if game.PlaceId ~= 108533757090220 then
-    game:GetService("RunService"):Set3dRenderingEnabled(false)
-    -- Auto set difficulty to apocalypse in other places
-    local autoSetDifficulty = true
-    if autoSetDifficulty then
-        task.spawn(function()
-            while autoSetDifficulty do
-                pcall(function()
-                    local args = {"dif_apocalypse"}
-                    game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("PlaceDifficultyVote"):InvokeServer(unpack(args))
-                    print("Auto-set difficulty to apocalypse")
-                end)
-                task.wait(2)
-            end
-        end)
-    end
-else
-    -- Auto join Christmas map with apocalypse difficulty (2-in-1)
-    local autoJoinChristmas = true
-    if autoJoinChristmas then
-        task.spawn(function()
-            while autoJoinChristmas do
-                pcall(function()
-                    local args = {"map_christmas", "dif_apocalypse"}
-                    game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("LobbySetMap_5"):InvokeServer(unpack(args))
-                    print("Auto-joined Christmas map with apocalypse difficulty")
-                end)
-                task.wait(2)
-            end
-        end)
-    end
-end
-
--- Anti-AFK
+-- Anti-AFK setup
 local virtualUser = game:GetService("VirtualUser")
 local antiAfkEnabled = true
-task.spawn(function()
-    while antiAfkEnabled do
-        wait(60)
-        virtualUser:CaptureController()
-        virtualUser:ClickButton2(Vector2.new())
-    end
-end)
 
--- Auto join Christmas map with apocalypse difficulty (2-in-1)
-if autoJoinChristmas then
+local function startAntiAfk()
     task.spawn(function()
-        while autoJoinChristmas do
-            pcall(function()
-                local args = {"map_christmas", "dif_apocalypse"}
-                game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("LobbySetMap_5"):InvokeServer(unpack(args))
-                print("Auto-joined Christmas map with apocalypse difficulty")
-            end)
-            task.wait(2)
+        while antiAfkEnabled do
+            task.wait(60)
+            virtualUser:CaptureController()
+            virtualUser:ClickButton2(Vector2.new())
+            print("Anti-AFK activated")
         end
     end)
 end
 
--- Auto move to map
-if autoJoinMap then
-    task.spawn(function()
-        while autoJoinMap do
-            if game.PlaceId == 108533757090220 then
-                local char = game.Players.LocalPlayer.Character
-                if char then
-                    local pl = char:FindFirstChild("HumanoidRootPart")
-                    local humanoid = char:FindFirstChild("Humanoid")
-                    if pl and humanoid then
-                        local location = CFrame.new(82, 66, 784)
-                        humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
-                        pl.CFrame = location
-                    end
-                end
-            end
-            task.wait(1)
-        end
-    end)
-end
+-- Start anti-AFK
+startAntiAfk()
 
--- Auto change speed
-if autoSpeedChange then
-    task.spawn(function()
-        while autoSpeedChange do
-            pcall(function()
-                local args = {3}
-                game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("ChangeTickSpeed"):InvokeServer(unpack(args))
-            end)
-            task.wait(1)
-        end
-    end)
-end
--- Auto difficulty
-if autodifficulty then
-    task.spawn(function()
-        while autodifficulty do
-            pcall(function()
-                local args = {[1] = "dif_apocalypse"}
-                game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("PlaceDifficultyVote"):InvokeServer(unpack(args))
-            end)
-            task.wait(1)
-        end
-    end)
-end
-
--- Auto skip waves
-if autoSkipWaves then
-    task.spawn(function()
-        while autoSkipWaves do
-            pcall(function()
-                local args = {"y"}
-                game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("SkipWave"):InvokeServer(unpack(args))
-                print("Wave skipped")
-            end)
-            task.wait(0.2)
-        end
-    end)
-end
-
--- Auto restart
-if autoRestart then
-    task.spawn(function()
-        while autoRestart do
-            pcall(function()
-                game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("RestartGame"):InvokeServer()
-            end)
-            task.wait(5)
-        end
-    end)
-end
-
-local rafflesiaConfigs = {
-    {
-        id = 1,
-        pathIndex = 1,
-        position = Vector3.new(108.08275604248047, 1.24399995803833, -89.43217468261719),
-        distanceAlongPath = 14.355410973230997,
-        cf = CFrame.new(108.08275604248047, 1.24399995803833, -89.43217468261719, 1, 0, -0, -0, 1, -0, -0, 0, 1),
-        rotation = 180
-    },
-    {
-        id = 2,
-        pathIndex = 2,
-        position = Vector3.new(110.77904510498047, 1.24399995803833, 101.38140869140625),
-        distanceAlongPath = 15.957521200180054,
-        cf = CFrame.new(110.77904510498047, 1.24399995803833, 101.38140869140625, -1, 0, -0, -0, 1, -0, -0, 0, -1),
-        rotation = 180
-    },
-    {
-        id = 3,
-        pathIndex = 3,
-        position = Vector3.new(-99.63849639892578, 1.2442139387130737, 89.81119537353516),
-        distanceAlongPath = 11.797891802410147,
-        cf = CFrame.new(-99.63849639892578, 1.2442139387130737, 89.81119537353516, -0.19025853276252747, 0.00011673955305013806, 0.981734037399292, -0, 1, -0.00011891158646903932, -0.981734037399292, -0.000022623944460065104, -0.19025853276252747),
-        rotation = 180
-    },
-    {
-        id = 4,
-        pathIndex = 4,
-        position = Vector3.new(-75.63298797607422, 1.24399995803833, -119.84286499023438),
-        distanceAlongPath = 14.971781598360643,
-        cf = CFrame.new(-75.63298797607422, 1.24399995803833, -119.84286499023438, 0.7071068286895752, 0, 0.7071067690849304, -0, 1, -0, -0.7071068286895752, 0, 0.7071067690849304),
-        rotation = 180
-    }
+local boxId = "ub_greenhouse"
+local unwantedUnits = {
+    "unit_clawfruit",
+    "unit_vine_guy",
+    "unit_multi_boom",
+    "unit_cannoneer",
+    "unit_stem_blast"
 }
 
--- Function to randomize position based on distance along path
-local function randomizePosition(config)
-    local randomOffset = (math.random() - 0.5) * 0.02 * config.distanceAlongPath -- ±2%
-    local newDistance = config.distanceAlongPath + randomOffset
+local autoRollEnabled = true
+local rollCount = 0
 
-    -- Apply small random offset to position as well (±2% of distanceAlongPath)
-    local offsetAmount = 0.02 * config.distanceAlongPath
-    local posOffset = Vector3.new(
-        (math.random() - 0.5) * 2 * offsetAmount,
-        0,
-        (math.random() - 0.5) * 2 * offsetAmount
-    )
+-- GUI setup (control panel only)
+local screenGui = Instance.new("ScreenGui")
+screenGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
+screenGui.ResetOnSpawn = false
 
-    return {
-        Valid = true,
-        PathIndex = config.pathIndex,
-        Position = config.position + posOffset,
-        DistanceAlongPath = newDistance,
-        CF = CFrame.new(config.position + posOffset),
-        Rotation = config.rotation
-    }
+local controlFrame = Instance.new("Frame")
+controlFrame.Parent = screenGui
+controlFrame.Size = UDim2.new(0, 350, 0, 200)
+controlFrame.Position = UDim2.new(0.5, -175, 0.5, -100)
+controlFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+controlFrame.BorderSizePixel = 0
+controlFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+controlFrame.Visible = true
+controlFrame.Active = true
+controlFrame.Draggable = true
+
+local controlCorner = Instance.new("UICorner")
+controlCorner.CornerRadius = UDim.new(0, 8)
+controlCorner.Parent = controlFrame
+
+local statusTitle = Instance.new("TextLabel")
+statusTitle.Parent = controlFrame
+statusTitle.Size = UDim2.new(1, 0, 0, 40)
+statusTitle.Position = UDim2.new(0, 0, 0, 0)
+statusTitle.BackgroundTransparency = 1
+statusTitle.Text = "Rolling Greenhouse Box"
+statusTitle.TextColor3 = Color3.fromRGB(150, 200, 255)
+statusTitle.TextScaled = true
+statusTitle.Font = Enum.Font.FredokaOne
+statusTitle.ZIndex = 2
+
+local rollCountLabel = Instance.new("TextLabel")
+rollCountLabel.Parent = controlFrame
+rollCountLabel.Size = UDim2.new(1, 0, 0, 30)
+rollCountLabel.Position = UDim2.new(0, 0, 0.3, -15)
+rollCountLabel.BackgroundTransparency = 1
+rollCountLabel.Text = "Rolls: 0"
+rollCountLabel.TextColor3 = Color3.fromRGB(200, 200, 255)
+rollCountLabel.TextScaled = true
+rollCountLabel.Font = Enum.Font.FredokaOne
+rollCountLabel.ZIndex = 2
+
+local stopButton = Instance.new("TextButton")
+stopButton.Parent = controlFrame
+stopButton.Size = UDim2.new(0, 200, 0, 40)
+stopButton.Position = UDim2.new(0.5, -100, 0.7, -20)
+stopButton.BackgroundColor3 = Color3.fromRGB(200, 100, 100)
+stopButton.Text = "STOP"
+stopButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+stopButton.TextScaled = true
+stopButton.Font = Enum.Font.FredokaOne
+stopButton.BorderSizePixel = 0
+stopButton.ZIndex = 2
+
+local stopCorner = Instance.new("UICorner")
+stopCorner.CornerRadius = UDim.new(0, 6)
+stopCorner.Parent = stopButton
+
+-- Logic
+local function banUnit(unitName)
+    pcall(function()
+        game:GetService("ReplicatedStorage"):WaitForChild("RemoteEvents"):WaitForChild("BanFromUnitBox"):FireServer(boxId, unitName, true)
+        print("✓ Banned from greenhouse box: " .. unitName)
+    end)
 end
 
--- Get current cash
-local function getCash()
-    local cashDisplay = game:GetService("Players").LocalPlayer.PlayerGui.GameGui.Screen.Bottom.CurrencyDisplay.Cash
-    if cashDisplay then
-        local cashText = cashDisplay.Text or ""
-        local cleanText = string.gsub(cashText, "[^0-9]", "")
-        return tonumber(cleanText) or 0
+local function banAll()
+    for _, name in ipairs(unwantedUnits) do
+        banUnit(name)
+        task.wait(0.5)
     end
-    return 0
+    print("All unwanted units banned from crystal box!")
 end
 
-if autoWinDojo then
-    local rafflesiaCount = 0
+local function rollBox()
+    pcall(function()
+        local args = { "ub_greenhouse", 10 }
+        game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("BuyUnitBox"):InvokeServer(unpack(args))
+        rollCount += 1
+        rollCountLabel.Text = "Rolls: " .. rollCount
+        print("✓ Roll #" .. rollCount .. " - Attempting to buy greenhouse box (10x)")
+    end)
+end
+
+local function startAutoRoll()
     task.spawn(function()
-        while autoWinDojo do
-            local cash = getCash()
-            if cash < 100 and rafflesiaCount == #rafflesiaConfigs then
-                rafflesiaCount = 0
-            end
-            if cash >= 1250 and rafflesiaCount < #rafflesiaConfigs then
-                local config = rafflesiaConfigs[rafflesiaCount + 1]
-                local randomizedPlacement = randomizePosition(config)
-                pcall(function()
-                    local args = {
-                        "unit_rafflesia",
-                        randomizedPlacement
-                    }
-                    game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("PlaceUnit"):InvokeServer(unpack(args))
-                    print("Placed Rafflesia ID " .. config.id .. " at randomized position.")
-                end)
-                rafflesiaCount = rafflesiaCount + 1
-                task.wait(3)
-            end
+        while autoRollEnabled do
+            rollBox()
             task.wait(1)
         end
     end)
 end
 
-print("GTD script loaded successfully")
+-- Auto-start
+banAll()
+startAutoRoll()
+print("Auto ban and roll Mango Cluster enabled!")
+
+stopButton.MouseButton1Click:Connect(function()
+    autoRollEnabled = false
+    controlFrame.Visible = false
+    rollCount = 0
+    print("Auto roll stopped!")
+end)
+
+print("Script loaded - Greenhouse Box roller ready")
+print("3D Rendering disabled")
 print("Anti-AFK enabled")
