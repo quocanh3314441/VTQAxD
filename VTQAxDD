@@ -29,7 +29,9 @@ local unwantedUnits = {
     "unit_vine_guy",
     "unit_multi_boom",
     "unit_cannoneer",
-    "unit_stem_blast"
+    "unit_stem_blast",
+    "unit_seed_wing",
+    "unit_spirit_flower"
 }
 
 local autoRollEnabled = true
