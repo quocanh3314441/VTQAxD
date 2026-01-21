@@ -1,6 +1,14 @@
 -- Winter map
 local currentversion = "Garden Tower Defense-VTQAxD"
 
+-- Add vector.create compatibility if not present
+if not vector or not vector.create then
+    vector = {}
+    function vector.create(x, y, z)
+        return Vector3.new(x, y, z)
+    end
+end
+
 -- Disable 3D rendering
 if game.PlaceId ~= 108533757090220 then
     game:GetService("RunService"):Set3dRenderingEnabled(false)
@@ -49,33 +57,33 @@ local rafflesiaConfigs = {
     {
         id = 1,
         pathIndex = 1,
-        position = Vector3.new(108.08275604248047, 1.24399995803833, -89.43217468261719),
-        distanceAlongPath = 14.355410973230997,
-        cf = CFrame.new(108.08275604248047, 1.24399995803833, -89.43217468261719, 1, 0, -0, -0, 1, -0, -0, 0, 1),
+        position = vector.create(108.67588806152344, 1.2444835901260376, -81.66145324707031),
+        distanceAlongPath = 22.18454802113597,
+        cf = CFrame.new(108.67588806152344, 1.2444835901260376, -81.66145324707031, 0.9817340970039368, -0.00004524788892013021, 0.19025853276252747, -3.637978807091713e-12, 1.0000001192092896, 0.00023782317293807864, -0.19025854766368866, -0.00023347912065219134, 0.981734037399292),
         rotation = 180
     },
     {
         id = 2,
         pathIndex = 2,
-        position = Vector3.new(110.77904510498047, 1.24399995803833, 101.38140869140625),
-        distanceAlongPath = 15.957521200180054,
-        cf = CFrame.new(110.77904510498047, 1.24399995803833, 101.38140869140625, -1, 0, -0, -0, 1, -0, -0, 0, -1),
+        position = vector.create(102.9110107421875, 1.24399995803833, 83.74409484863281),
+        distanceAlongPath = 35.972370618306456,
+        cf = CFrame.new(102.9110107421875, 1.24399995803833, 83.74409484863281, -0.7071068286895752, -0, -0.7071067690849304, -0, 1, -0, 0.7071068286895752, 0, -0.7071067690849304),
         rotation = 180
     },
     {
         id = 3,
         pathIndex = 3,
-        position = Vector3.new(-99.63849639892578, 1.2442139387130737, 89.81119537353516),
-        distanceAlongPath = 11.797891802410147,
-        cf = CFrame.new(-99.63849639892578, 1.2442139387130737, 89.81119537353516, -0.19025853276252747, 0.00011673955305013806, 0.981734037399292, -0, 1, -0.00011891158646903932, -0.981734037399292, -0.000022623944460065104, -0.19025853276252747),
+        position = vector.create(-85.08262634277344, 1.244499921798706, 91.88279724121094),
+        distanceAlongPath = 26.782287793877675,
+        cf = CFrame.new(-85.08262634277344, 1.244499921798706, 91.88279724121094, 0.3819020390510559, 0, 0.9242027997970581, -0, 1.0000001192092896, -0, -0.9242029190063477, 0, 0.38190197944641113),
         rotation = 180
     },
     {
         id = 4,
         pathIndex = 4,
-        position = Vector3.new(-75.63298797607422, 1.24399995803833, -119.84286499023438),
-        distanceAlongPath = 14.971781598360643,
-        cf = CFrame.new(-75.63298797607422, 1.24399995803833, -119.84286499023438, 0.7071068286895752, 0, 0.7071067690849304, -0, 1, -0, -0.7071068286895752, 0, 0.7071067690849304),
+        position = vector.create(-71.66586303710938, 1.2442913055419922, -115.37047576904297),
+        distanceAlongPath = 20.974608364758822,
+        cf = CFrame.new(-71.66586303710938, 1.2442913055419922, -115.37047576904297, 0.8308756947517395, -0.00006627687253057957, 0.556458055973053, -0, 1, 0.00011910488683497533, -0.556458055973053, -0.00009896135452436283, 0.8308756947517395),
         rotation = 180
     }
 }
@@ -97,25 +105,26 @@ local function getCash()
     return 0
 end
 
--- Function to randomize position based on distance along path
+-- Randomize position by ±5% of X and Z (not based on distanceAlongPath)
 local function randomizePosition(config)
-    local randomOffset = (math.random() - 0.5) * 0.04 * config.distanceAlongPath -- ±2%
-    local newDistance = config.distanceAlongPath + randomOffset
+    local x = config.position.X
+    local y = config.position.Y
+    local z = config.position.Z
 
-    -- Apply small random offset to position as well (±2% of distanceAlongPath)
-    local offsetAmount = 0.02 * config.distanceAlongPath
-    local posOffset = Vector3.new(
-        (math.random() - 0.5) * 2 * offsetAmount,
-        0,
-        (math.random() - 0.5) * 2 * offsetAmount
-    )
+    local xOffset = (math.random() - 0.5) * 0.10 * math.abs(x) -- ±5% of X
+    local zOffset = (math.random() - 0.5) * 0.10 * math.abs(z) -- ±5% of Z
+
+    local newPos = vector.create(x + xOffset, y, z + zOffset)
+    -- Use the original CFrame's rotation, but new position
+    local _, _, _, r00, r01, r02, r10, r11, r12, r20, r21, r22 = config.cf:GetComponents()
+    local newCF = CFrame.new(newPos.X, newPos.Y, newPos.Z, r00, r01, r02, r10, r11, r12, r20, r21, r22)
 
     return {
         Valid = true,
         PathIndex = config.pathIndex,
-        Position = config.position + posOffset,
-        DistanceAlongPath = newDistance,
-        CF = CFrame.new(config.position + posOffset),
+        Position = newPos,
+        DistanceAlongPath = config.distanceAlongPath,
+        CF = newCF,
         Rotation = config.rotation
     }
 end
@@ -206,7 +215,7 @@ if autorestart then
     end)
 end
 
--- Auto win christmas
+-- Auto win christmas (randomize by 5% of X and Z)
 if autowindojo then
     rafflesiaCount = 0  -- Reset counter when toggle is turned ON
 
@@ -215,7 +224,7 @@ if autowindojo then
             local cash = getCash()
             
             -- If cash is very low and all rafflesias placed, reset counter
-            if cash < 100 and rafflesiaCount == #rafflesiaConfigs then
+            if cash == 3000 and rafflesiaCount == #rafflesiaConfigs then
                 rafflesiaCount = 0
                 print("Cash reset, ready to place rafflesias again")
             end
@@ -233,25 +242,25 @@ if autowindojo then
                         randomizedPlacement
                     }
                     game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("PlaceUnit"):InvokeServer(unpack(args))
-                    print("Attempting to place Rafflesia ID " .. config.id .. " (Cash before: " .. cashBefore .. ", Distance: " .. randomizedPlacement.DistanceAlongPath .. ")")
+                    print("Attempting to place Rafflesia ID " .. config.id .. " (Cash before: " .. cashBefore .. ", Position: " .. tostring(randomizedPlacement.Position) .. ")")
                 end)
                 
                 -- Wait and verify the money decreased
-                task.wait(1)
+                task.wait(0.2)
                 local cashAfter = getCash()
                 
                 if cashAfter < cashBefore - 1000 then
                     print("✓ Rafflesia ID " .. config.id .. " placed successfully! Cash after: " .. cashAfter)
-                    task.wait(3)  -- Wait for money to accumulate before next placement
+                    task.wait(0.2)  -- Wait for money to accumulate before next placement
                 else
                     -- Placement failed, revert counter
                     rafflesiaCount = rafflesiaCount - 1
                     print("✗ Rafflesia ID " .. config.id .. " placement failed. Retrying...")
-                    task.wait(1)
+                    task.wait(0.2)
                 end
             end
 
-            task.wait(1)
+            task.wait(0.2)
         end
     end)
 end
