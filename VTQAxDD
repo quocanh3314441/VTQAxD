@@ -256,11 +256,11 @@ if autowindojo then
                     -- Placement failed, revert counter
                     rafflesiaCount = rafflesiaCount - 1
                     print("✗ Rafflesia ID " .. config.id .. " placement failed. Retrying...")
-                    task.wait(0.2)
+                    task.wait(3)
                 end
             end
 
-            task.wait(0.2)
+            task.wait(3)
         end
     end)
 end
