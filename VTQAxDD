@@ -1,138 +1,76 @@
--- Winter map
-local currentversion = "Garden Tower Defense-VTQAxD"
+-- Garden Tower Defense – Auto Christmas Map + Apocalypse Difficulty (2-in-1)
+-- Place in a LocalScript (StarterPlayerScripts or similar)
 
--- Add vector.create compatibility if not present
-if not vector or not vector.create then
-    vector = {}
-    function vector.create(x, y, z)
-        return Vector3.new(x, y, z)
-    end
-end
+-- SETTINGS
+local autoJoinMap = true
+local autoJoinChristmas = true
+local autoSpeedChange = true
+local autoSkipWaves = true
+local autoRestart = true
+local autoWinDojo = true
 
--- Disable 3D rendering
 if game.PlaceId ~= 108533757090220 then
     game:GetService("RunService"):Set3dRenderingEnabled(false)
+    -- Auto set difficulty to apocalypse in other places
+    local autoSetDifficulty = true
+    if autoSetDifficulty then
+        task.spawn(function()
+            while autoSetDifficulty do
+                pcall(function()
+                    local args = {"dif_apocalypse"}
+                    game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("PlaceDifficultyVote"):InvokeServer(unpack(args))
+                    print("Auto-set difficulty to apocalypse")
+                end)
+                task.wait(2)
+            end
+        end)
+    end
+else
+    -- Auto join Christmas map with apocalypse difficulty (2-in-1)
+    local autoJoinChristmas = true
+    if autoJoinChristmas then
+        task.spawn(function()
+            while autoJoinChristmas do
+                pcall(function()
+                    local args = {"map_christmas", "dif_apocalypse"}
+                    game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("LobbySetMap_5"):InvokeServer(unpack(args))
+                    print("Auto-joined Christmas map with apocalypse difficulty")
+                end)
+                task.wait(2)
+            end
+        end)
+    end
 end
 
--- Anti-AFK setup
+-- Anti-AFK
 local virtualUser = game:GetService("VirtualUser")
 local antiAfkEnabled = true
-local timeInAfk = 0
-
-local function startAfkTimer()
-    spawn(function()
-        while antiAfkEnabled do
-            wait(1)
-            timeInAfk = timeInAfk + 1
-        end
-    end)
-end
-
-local function startAntiAfk()
-    spawn(function()
-        while antiAfkEnabled do
-            wait(60)
-            virtualUser:CaptureController()
-            virtualUser:ClickButton2(Vector2.new())
-        end
-    end)
-end
-
--- Start anti-AFK
-startAntiAfk()
-startAfkTimer()
-
--- Local var
-local autojoinmap = true
-local autojoindojo = true
-local autodifficulty = true
-local autospeedchange = true
-local autoskipwaves = true
-local autorestart = true
-local autowindojo = true
-
--- Rafflesia tracking state
-local rafflesiaCount = 0  -- Track number of Rafflesias placed
-local rafflesiaConfigs = {
-    {
-        id = 1,
-        pathIndex = 1,
-        position = vector.create(108.67588806152344, 1.2444835901260376, -81.66145324707031),
-        distanceAlongPath = 22.18454802113597,
-        cf = CFrame.new(108.67588806152344, 1.2444835901260376, -81.66145324707031, 0.9817340970039368, -0.00004524788892013021, 0.19025853276252747, -3.637978807091713e-12, 1.0000001192092896, 0.00023782317293807864, -0.19025854766368866, -0.00023347912065219134, 0.981734037399292),
-        rotation = 180
-    },
-    {
-        id = 2,
-        pathIndex = 2,
-        position = vector.create(102.9110107421875, 1.24399995803833, 83.74409484863281),
-        distanceAlongPath = 35.972370618306456,
-        cf = CFrame.new(102.9110107421875, 1.24399995803833, 83.74409484863281, -0.7071068286895752, -0, -0.7071067690849304, -0, 1, -0, 0.7071068286895752, 0, -0.7071067690849304),
-        rotation = 180
-    },
-    {
-        id = 3,
-        pathIndex = 3,
-        position = vector.create(-85.08262634277344, 1.244499921798706, 91.88279724121094),
-        distanceAlongPath = 26.782287793877675,
-        cf = CFrame.new(-85.08262634277344, 1.244499921798706, 91.88279724121094, 0.3819020390510559, 0, 0.9242027997970581, -0, 1.0000001192092896, -0, -0.9242029190063477, 0, 0.38190197944641113),
-        rotation = 180
-    },
-    {
-        id = 4,
-        pathIndex = 4,
-        position = vector.create(-71.66586303710938, 1.2442913055419922, -115.37047576904297),
-        distanceAlongPath = 20.974608364758822,
-        cf = CFrame.new(-71.66586303710938, 1.2442913055419922, -115.37047576904297, 0.8308756947517395, -0.00006627687253057957, 0.556458055973053, -0, 1, 0.00011910488683497533, -0.556458055973053, -0.00009896135452436283, 0.8308756947517395),
-        rotation = 180
-    }
-}
-
--- Get current cash
-local function getCash()
-    local cashDisplay = game:GetService("Players").LocalPlayer.PlayerGui.GameGui.Screen.Bottom.CurrencyDisplay.Cash
-    if cashDisplay then
-        local cashText = cashDisplay.Text or ""
-        print("Cash text: " .. cashText)  -- Debug: see what the text looks like
-        
-        -- Remove commas and any non-digit characters except the number
-        local cleanText = string.gsub(cashText, "[^0-9]", "")
-        local cashValue = tonumber(cleanText) or 0
-        
-        print("Cleaned text: " .. cleanText .. " | Final value: " .. cashValue)  -- Debug output
-        return cashValue
+task.spawn(function()
+    while antiAfkEnabled do
+        wait(60)
+        virtualUser:CaptureController()
+        virtualUser:ClickButton2(Vector2.new())
     end
-    return 0
-end
+end)
 
--- Randomize position by ±5% of X and Z (not based on distanceAlongPath)
-local function randomizePosition(config)
-    local x = config.position.X
-    local y = config.position.Y
-    local z = config.position.Z
-
-    local xOffset = (math.random() - 0.5) * 0.10 * math.abs(x) -- ±5% of X
-    local zOffset = (math.random() - 0.5) * 0.10 * math.abs(z) -- ±5% of Z
-
-    local newPos = vector.create(x + xOffset, y, z + zOffset)
-    -- Use the original CFrame's rotation, but new position
-    local _, _, _, r00, r01, r02, r10, r11, r12, r20, r21, r22 = config.cf:GetComponents()
-    local newCF = CFrame.new(newPos.X, newPos.Y, newPos.Z, r00, r01, r02, r10, r11, r12, r20, r21, r22)
-
-    return {
-        Valid = true,
-        PathIndex = config.pathIndex,
-        Position = newPos,
-        DistanceAlongPath = config.distanceAlongPath,
-        CF = newCF,
-        Rotation = config.rotation
-    }
-end
-
--- Auto join map
-if autojoinmap then
+-- Auto join Christmas map with apocalypse difficulty (2-in-1)
+if autoJoinChristmas then
     task.spawn(function()
-        while autojoinmap do
+        while autoJoinChristmas do
+            pcall(function()
+                local args = {"map_christmas", "dif_apocalypse"}
+                game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("LobbySetMap_5"):InvokeServer(unpack(args))
+                print("Auto-joined Christmas map with apocalypse difficulty")
+            end)
+            task.wait(2)
+        end
+    end)
+end
+
+-- Auto move to map
+if autoJoinMap then
+    task.spawn(function()
+        while autoJoinMap do
             if game.PlaceId == 108533757090220 then
                 local char = game.Players.LocalPlayer.Character
                 if char then
@@ -150,19 +88,18 @@ if autojoinmap then
     end)
 end
 
--- Auto join christmas
-if autojoindojo then
+-- Auto change speed
+if autoSpeedChange then
     task.spawn(function()
-        while autojoindojo do
-            local args = {[1] = "map_christmas"}
+        while autoSpeedChange do
             pcall(function()
-                game:GetService("ReplicatedStorage").RemoteFunctions.LobbySetMap_5:InvokeServer(unpack(args))
+                local args = {3}
+                game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("ChangeTickSpeed"):InvokeServer(unpack(args))
             end)
             task.wait(1)
         end
     end)
 end
-
 -- Auto difficulty
 if autodifficulty then
     task.spawn(function()
@@ -176,25 +113,12 @@ if autodifficulty then
     end)
 end
 
--- Auto change speed
-if autospeedchange then
-    task.spawn(function()
-        while autospeedchange do
-            pcall(function()
-                local args = {[1] = 3}
-                game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("ChangeTickSpeed"):InvokeServer(unpack(args))
-            end)
-            task.wait(1)
-        end
-    end)
-end
-
 -- Auto skip waves
-if autoskipwaves then
+if autoSkipWaves then
     task.spawn(function()
-        while autoskipwaves do
+        while autoSkipWaves do
             pcall(function()
-                local args = {[1] = "y"}
+                local args = {"y"}
                 game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("SkipWave"):InvokeServer(unpack(args))
                 print("Wave skipped")
             end)
@@ -204,9 +128,9 @@ if autoskipwaves then
 end
 
 -- Auto restart
-if autorestart then
+if autoRestart then
     task.spawn(function()
-        while autorestart do
+        while autoRestart do
             pcall(function()
                 game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("RestartGame"):InvokeServer()
             end)
@@ -215,52 +139,98 @@ if autorestart then
     end)
 end
 
--- Auto win christmas (randomize by 5% of X and Z)
-if autowindojo then
-    rafflesiaCount = 0  -- Reset counter when toggle is turned ON
+local rafflesiaConfigs = {
+    {
+        id = 1,
+        pathIndex = 1,
+        position = Vector3.new(108.08275604248047, 1.24399995803833, -89.43217468261719),
+        distanceAlongPath = 14.355410973230997,
+        cf = CFrame.new(108.08275604248047, 1.24399995803833, -89.43217468261719, 1, 0, -0, -0, 1, -0, -0, 0, 1),
+        rotation = 180
+    },
+    {
+        id = 2,
+        pathIndex = 2,
+        position = Vector3.new(110.77904510498047, 1.24399995803833, 101.38140869140625),
+        distanceAlongPath = 15.957521200180054,
+        cf = CFrame.new(110.77904510498047, 1.24399995803833, 101.38140869140625, -1, 0, -0, -0, 1, -0, -0, 0, -1),
+        rotation = 180
+    },
+    {
+        id = 3,
+        pathIndex = 3,
+        position = Vector3.new(-99.63849639892578, 1.2442139387130737, 89.81119537353516),
+        distanceAlongPath = 11.797891802410147,
+        cf = CFrame.new(-99.63849639892578, 1.2442139387130737, 89.81119537353516, -0.19025853276252747, 0.00011673955305013806, 0.981734037399292, -0, 1, -0.00011891158646903932, -0.981734037399292, -0.000022623944460065104, -0.19025853276252747),
+        rotation = 180
+    },
+    {
+        id = 4,
+        pathIndex = 4,
+        position = Vector3.new(-75.63298797607422, 1.24399995803833, -119.84286499023438),
+        distanceAlongPath = 14.971781598360643,
+        cf = CFrame.new(-75.63298797607422, 1.24399995803833, -119.84286499023438, 0.7071068286895752, 0, 0.7071067690849304, -0, 1, -0, -0.7071068286895752, 0, 0.7071067690849304),
+        rotation = 180
+    }
+}
 
+-- Function to randomize position based on distance along path
+local function randomizePosition(config)
+    local randomOffset = (math.random() - 0.5) * 0.05 * config.distanceAlongPath -- ±5%
+    local newDistance = config.distanceAlongPath + randomOffset
+
+    -- Apply small random offset to position as well (±5% of distanceAlongPath)
+    local offsetAmount = 0.05 * config.distanceAlongPath
+    local posOffset = Vector3.new(
+        (math.random() - 0.5) * 2 * offsetAmount,
+        0,
+        (math.random() - 0.5) * 2 * offsetAmount
+    )
+
+    return {
+        Valid = true,
+        PathIndex = config.pathIndex,
+        Position = config.position + posOffset,
+        DistanceAlongPath = newDistance,
+        CF = CFrame.new(config.position + posOffset),
+        Rotation = config.rotation
+    }
+end
+
+-- Get current cash
+local function getCash()
+    local cashDisplay = game:GetService("Players").LocalPlayer.PlayerGui.GameGui.Screen.Bottom.CurrencyDisplay.Cash
+    if cashDisplay then
+        local cashText = cashDisplay.Text or ""
+        local cleanText = string.gsub(cashText, "[^0-9]", "")
+        return tonumber(cleanText) or 0
+    end
+    return 0
+end
+
+if autoWinDojo then
+    local rafflesiaCount = 0
     task.spawn(function()
-        while autowindojo do
+        while autoWinDojo do
             local cash = getCash()
-            
-            -- If cash is very low and all rafflesias placed, reset counter
-            if cash == 3000 and rafflesiaCount == #rafflesiaConfigs then
+            if cash < 100 and rafflesiaCount == #rafflesiaConfigs then
                 rafflesiaCount = 0
-                print("Cash reset, ready to place rafflesias again")
             end
-            
-            -- Check if we can place next Rafflesia
             if cash >= 1250 and rafflesiaCount < #rafflesiaConfigs then
-                local cashBefore = cash
-                rafflesiaCount = rafflesiaCount + 1
-                local config = rafflesiaConfigs[rafflesiaCount]
-                
+                local config = rafflesiaConfigs[rafflesiaCount + 1]
+                local randomizedPlacement = randomizePosition(config)
                 pcall(function()
-                    local randomizedPlacement = randomizePosition(config)
                     local args = {
                         "unit_rafflesia",
                         randomizedPlacement
                     }
                     game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("PlaceUnit"):InvokeServer(unpack(args))
-                    print("Attempting to place Rafflesia ID " .. config.id .. " (Cash before: " .. cashBefore .. ", Position: " .. tostring(randomizedPlacement.Position) .. ")")
+                    print("Placed Rafflesia ID " .. config.id .. " at randomized position.")
                 end)
-                
-                -- Wait and verify the money decreased
-                task.wait(0.2)
-                local cashAfter = getCash()
-                
-                if cashAfter < cashBefore - 1000 then
-                    print("✓ Rafflesia ID " .. config.id .. " placed successfully! Cash after: " .. cashAfter)
-                    task.wait(0.2)  -- Wait for money to accumulate before next placement
-                else
-                    -- Placement failed, revert counter
-                    rafflesiaCount = rafflesiaCount - 1
-                    print("✗ Rafflesia ID " .. config.id .. " placement failed. Retrying...")
-                    task.wait(3)
-                end
+                rafflesiaCount = rafflesiaCount + 1
+                task.wait(3)
             end
-
-            task.wait(3)
+            task.wait(1)
         end
     end)
 end
