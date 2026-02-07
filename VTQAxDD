@@ -1,6 +1,18 @@
 -- Winter map
 local currentversion = "Garden Tower Defense-VTQAxD"
 
+-- FPS limit (requires executor support)
+local fpsLimit = 5
+pcall(function()
+    if setfpscap then
+        setfpscap(fpsLimit)
+    elseif set_fps_cap then
+        set_fps_cap(fpsLimit)
+    elseif setfps then
+        setfps(fpsLimit)
+    end
+end)
+
 -- Add vector.create compatibility if not present
 if not vector or not vector.create then
     vector = {}
@@ -13,6 +25,9 @@ end
 if game.PlaceId ~= 108533757090220 then
     game:GetService("RunService"):Set3dRenderingEnabled(false)
 end
+
+-- Services
+local Players = game:GetService("Players")
 
 -- Anti-AFK setup
 local virtualUser = game:GetService("VirtualUser")
@@ -88,21 +103,37 @@ local rafflesiaConfigs = {
     }
 }
 
--- Get current cash
+-- Get current cash (nil-safe)
 local function getCash()
-    local cashDisplay = game:GetService("Players").LocalPlayer.PlayerGui.GameGui.Screen.Bottom.CurrencyDisplay.Cash
-    if cashDisplay then
-        local cashText = cashDisplay.Text or ""
-        print("Cash text: " .. cashText)  -- Debug: see what the text looks like
-        
-        -- Remove commas and any non-digit characters except the number
-        local cleanText = string.gsub(cashText, "[^0-9]", "")
-        local cashValue = tonumber(cleanText) or 0
-        
-        print("Cleaned text: " .. cleanText .. " | Final value: " .. cashValue)  -- Debug output
-        return cashValue
-    end
-    return 0
+    local player = Players.LocalPlayer
+    if not player then return 0 end
+
+    local playerGui = player:FindFirstChild("PlayerGui")
+    if not playerGui then return 0 end
+
+    local gameGui = playerGui:FindFirstChild("GameGui")
+    if not gameGui then return 0 end
+
+    local screen = gameGui:FindFirstChild("Screen")
+    if not screen then return 0 end
+
+    local bottom = screen:FindFirstChild("Bottom")
+    if not bottom then return 0 end
+
+    local currencyDisplay = bottom:FindFirstChild("CurrencyDisplay")
+    if not currencyDisplay then return 0 end
+
+    local cashDisplay = currencyDisplay:FindFirstChild("Cash")
+    if not cashDisplay or not cashDisplay.Text then return 0 end
+
+    local cashText = cashDisplay.Text or ""
+    print("Cash text: " .. cashText)
+
+    local cleanText = string.gsub(cashText, "[^0-9]", "")
+    local cashValue = tonumber(cleanText) or 0
+
+    print("Cleaned text: " .. cleanText .. " | Final value: " .. cashValue)
+    return cashValue
 end
 
 -- Randomize position by ±5% of X and Z (not based on distanceAlongPath)
@@ -216,48 +247,57 @@ if autorestart then
 end
 
 -- Auto win christmas (randomize by 5% of X and Z)
+-- Only place when PlaceId is NOT 108533757090220
 if autowindojo then
-    rafflesiaCount = 0  -- Reset counter when toggle is turned ON
+    rafflesiaCount = 0
 
     task.spawn(function()
         while autowindojo do
-            local cash = getCash()
-            
-            -- If cash is very low and all rafflesias placed, reset counter
-            if cash == 3000 and rafflesiaCount == #rafflesiaConfigs then
-                rafflesiaCount = 0
-                print("Cash reset, ready to place rafflesias again")
-            end
-            
-            -- Check if we can place next Rafflesia
-            if cash >= 1250 and rafflesiaCount < #rafflesiaConfigs then
-                local cashBefore = cash
-                rafflesiaCount = rafflesiaCount + 1
-                local config = rafflesiaConfigs[rafflesiaCount]
-                
-                pcall(function()
-                    local randomizedPlacement = randomizePosition(config)
-                    local args = {
-                        "unit_rafflesia",
-                        randomizedPlacement
-                    }
-                    game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("PlaceUnit"):InvokeServer(unpack(args))
-                    print("Attempting to place Rafflesia ID " .. config.id .. " (Cash before: " .. cashBefore .. ", Position: " .. tostring(randomizedPlacement.Position) .. ")")
-                end)
-                
-                -- Wait and verify the money decreased
-                task.wait(0.2)
-                local cashAfter = getCash()
-                
-                if cashAfter < cashBefore - 1000 then
-                    print("✓ Rafflesia ID " .. config.id .. " placed successfully! Cash after: " .. cashAfter)
-                    task.wait(0.2)  -- Wait for money to accumulate before next placement
-                else
-                    -- Placement failed, revert counter
-                    rafflesiaCount = rafflesiaCount - 1
-                    print("✗ Rafflesia ID " .. config.id .. " placement failed. Retrying...")
-                    task.wait(3)
+            local ok, err = pcall(function()
+                if game.PlaceId ~= 108533757090220 then
+                    local cash = getCash()
+
+                    -- If cash is very low and all rafflesias placed, reset counter
+                    if cash == 3000 and rafflesiaCount == #rafflesiaConfigs then
+                        rafflesiaCount = 0
+                        print("Cash reset, ready to place rafflesias again")
+                    end
+
+                    -- Check if we can place next Rafflesia
+                    if cash >= 1250 and rafflesiaCount < #rafflesiaConfigs then
+                        local cashBefore = cash
+                        rafflesiaCount = rafflesiaCount + 1
+                        local config = rafflesiaConfigs[rafflesiaCount]
+
+                        pcall(function()
+                            local randomizedPlacement = randomizePosition(config)
+                            local args = { "unit_rafflesia", randomizedPlacement }
+                            game:GetService("ReplicatedStorage")
+                                :WaitForChild("RemoteFunctions")
+                                :WaitForChild("PlaceUnit")
+                                :InvokeServer(unpack(args))
+                            print("Attempting to place Rafflesia ID " .. config.id .. " (Cash before: " .. cashBefore .. ", Position: " .. tostring(randomizedPlacement.Position) .. ")")
+                        end)
+
+                        -- Wait and verify the money decreased
+                        task.wait(0.2)
+                        local cashAfter = getCash()
+
+                        if cashAfter < cashBefore - 1000 then
+                            print("✓ Rafflesia ID " .. config.id .. " placed successfully! Cash after: " .. cashAfter)
+                            task.wait(0.2)  -- Wait for money to accumulate before next placement
+                        else
+                            -- Placement failed, revert counter
+                            rafflesiaCount = rafflesiaCount - 1
+                            print("✗ Rafflesia ID " .. config.id .. " placement failed. Retrying...")
+                            task.wait(3)
+                        end
+                    end
                 end
+            end)
+
+            if not ok then
+                warn("Auto Rafflesia error:", err)
             end
 
             task.wait(3)
