@@ -87,23 +87,35 @@ if autolowgraphics then
 end
 
 -- Rafflesia tracking state
-local flowerConfigs = {
+local rafflesiaConfigs = {
     {
         id = 1,
-        position = vector.create(-38.81913757324219, -85.18521881103516, 28.513927459716797),
-        cf = CFrame.new(-38.81913757324219, -85.18521881103516, 28.513927459716797, -1, 0, -8.742277657347586e-08, 0, 1, 0, 8.742277657347586e-08, 0, -1),
+        position = vector.create(108.30317687988281, 1.244179606437683, -83.53508758544922),
+        cf = CFrame.new(108.30317687988281, 1.244179606437683, -83.53508758544922, 0.9814555048942566, -0.000022965787138673477, 0.19169050455093384, 1.818989620386291e-12, 1.0000001192092896, 0.00011980656563537195, -0.19169053435325623, -0.00011758481559809297, 0.981455385684967),
         rotation = 180
     },
     {
         id = 2,
-        position = vector.create(-33.78114318847656, -85.18521881103516, 39.39654541015625),
-        cf = CFrame.new(-33.78114318847656, -85.18521881103516, 39.39654541015625, -1, 0, -8.742277657347586e-08, 0, 1, 0, 8.742277657347586e-08, 0, -1),
+        position = vector.create(91.8934555053711, 1.2442028522491455, 78.30784606933594),
+        cf = CFrame.new(91.8934555053711, 1.2442028522491455, 78.30784606933594, -0.19169051945209503, -0.00023516961664427072, -0.981455385684967, 3.637978807091713e-12, 1, -0.0002396131312707439, 0.9814554452896118, -0.00004593157063936815, -0.19169050455093384),
+        rotation = 180
+    },
+    {
+        id = 3,
+        position = vector.create(-91.36727905273438, 1.244154453277588, 89.73824310302734),
+        cf = CFrame.new(-91.36727905273438, 1.244154453277588, 89.73824310302734, 0.19905993342399597, -0.0002344665990676731, 0.9799873232841492, -3.637978807091713e-12, 1, 0.00023925471759866923, -0.979987382888794, -0.000047626032028347254, 0.19905991852283478),
+        rotation = 180
+    },
+    {
+        id = 4,
+        position = vector.create(-75.59390258789062, 1.24399995803833, -119.80378723144531),
+        cf = CFrame.new(-75.59390258789062, 1.24399995803833, -119.80378723144531, 0.7032743096351624, 0, 0.7109186053276062, -0, 1, -0, -0.7109186053276062, 0, 0.7032743096351624),
         rotation = 180
     }
 }
 
--- Get the number of placed Flowers using the Units label's Text property
-local function getPlacedFlowerCount()
+-- Get the number of placed Rafflesias using the Units label's Text property
+local function getPlacedRafflesiaCount()
     local player = Players.LocalPlayer
     if not player then return 0 end
     local units = player:FindFirstChild("PlayerGui")
@@ -122,25 +134,30 @@ local function getPlacedFlowerCount()
 
     if units and (units:IsA("TextLabel") or units:IsA("TextButton")) then
         local text = units.Text
-        local placed = text:match("^(%d+)%s*/%s*%d+")
+        -- Try to match "Rafflesia: X/Y" or fallback to the first number
+        local placed = text:match("Rafflesia:%s*(%d+)%s*/%s*%d+") or text:match("^(%d+)%s*/%s*%d+")
         return tonumber(placed) or 0
     end
     return 0
 end
 
--- Randomize position by ±5% of X and Z (not based on distanceAlongPath)
-local function randomizePosition(config)
+-- Randomize position by ±5% of X and Z for Rafflesia
+local function randomizeRafflesiaPosition(config)
     local x = config.position.X
     local y = config.position.Y
     local z = config.position.Z
     local xOffset = (math.random() - 0.5) * 0.10 * math.abs(x)
+    local zOffset = (math.random() - 0.5) * 0.10 * math.abs(z)
     local newX = x + xOffset
-    local newPos = vector.create(newX, y, z)
+    local newZ = z + zOffset
+    local newPos = vector.create(newX, y, newZ)
     local _, _, _, r00, r01, r02, r10, r11, r12, r20, r21, r22 = config.cf:GetComponents()
-    local newCF = CFrame.new(newX, y, z, r00, r01, r02, r10, r11, r12, r20, r21, r22)
+    local newCF = CFrame.new(newX, y, newZ, r00, r01, r02, r10, r11, r12, r20, r21, r22)
     return {
         Valid = true,
+        PathIndex = config.id,
         Position = newPos,
+        DistanceAlongPath = config.DistanceAlongPath,
         CF = newCF,
         Rotation = config.rotation
     }
@@ -171,7 +188,7 @@ end
 if autojoindojo then
     task.spawn(function()
         while autojoindojo do
-            local args = {[1] = "map_space"}
+            local args = {[1] = "map_christmas"}
             pcall(function()
                 game:GetService("ReplicatedStorage").RemoteFunctions.LobbySetMap_5:InvokeServer(unpack(args))
             end)
@@ -244,40 +261,32 @@ if autorestart then
     end)
 end
 
--- Auto win christmas (randomize by 5% of X and Z)
--- Only place when PlaceId is NOT 108533757090220
 if autowindojo then
     task.spawn(function()
         while autowindojo do
-            local ok, err = pcall(function()
-                if game.PlaceId ~= 108533757090220 then
-                    local placedCount = getPlacedFlowerCount()
-                    flowerCount = placedCount
-                    if flowerCount < #flowerConfigs then
-                        local config = flowerConfigs[flowerCount + 1]
-                        local randomizedPlacement = randomizePosition(config)
-                        local args = { "unit_evolution_flower", randomizedPlacement }
-                        local success, result = pcall(function()
-                            return game:GetService("ReplicatedStorage")
-                                :WaitForChild("RemoteFunctions")
-                                :WaitForChild("PlaceUnit")
-                                :InvokeServer(unpack(args))
-                        end)
-                        print("Attempting to place Flower ID " .. config.id .. " (Placed: " .. flowerCount .. ", Position: " .. tostring(randomizedPlacement.Position) .. ") Result: " .. tostring(result))
-                        -- Wait and verify via UI count
-                        task.wait(0.1)
-                        local newCount = getPlacedFlowerCount()
-                        if newCount > flowerCount then
-                            print("? Flower ID " .. config.id .. " placed successfully! New count: " .. newCount)
-                        else
-                            print("? Flower ID " .. config.id .. " placement failed. Retrying...")
-                            task.wait(2)
-                        end
+            if game.PlaceId ~= 108533757090220 then
+                local placedCount = getPlacedRafflesiaCount()
+                if placedCount < #rafflesiaConfigs then
+                    local config = rafflesiaConfigs[placedCount + 1]
+                    local randomizedPlacement = randomizeRafflesiaPosition(config)
+                    local args = { "unit_rafflesia", randomizedPlacement }
+                    local success, result = pcall(function()
+                        return game:GetService("ReplicatedStorage")
+                            :WaitForChild("RemoteFunctions")
+                            :WaitForChild("PlaceUnit")
+                            :InvokeServer(unpack(args))
+                    end)
+                    print("Attempting to place Rafflesia ID " .. config.id .. " (Placed: " .. placedCount .. ", Position: " .. tostring(randomizedPlacement.Position) .. ") Result: " .. tostring(result))
+                    -- Wait and verify via UI count
+                    task.wait(0.1)
+                    local newCount = getPlacedRafflesiaCount()
+                    if newCount > placedCount then
+                        print("✓ Rafflesia ID " .. config.id .. " placed successfully! New count: " .. newCount)
+                    else
+                        print("✗ Rafflesia ID " .. config.id .. " placement failed. Retrying...")
+                        task.wait(2)
                     end
                 end
-            end)
-            if not ok then
-                warn("Auto Flower error:", err)
             end
             task.wait(2)
         end
