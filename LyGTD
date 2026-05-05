@@ -1,8 +1,6 @@
--- Winter map
+-- Winter map - ULTRA STABLE 5 FPS Version (MULTI-METHOD Click Fix + Heavy Debugging)
 local currentversion = "Garden Tower Defense-VTQAxD"
 
-
--- Add vector.create compatibility if not present
 if not vector or not vector.create then
     vector = {}
     function vector.create(x, y, z)
@@ -10,28 +8,21 @@ if not vector or not vector.create then
     end
 end
 
--- Disable 3D rendering
-    game:GetService("RunService"):Set3dRenderingEnabled(false)
+game:GetService("RunService"):Set3dRenderingEnabled(false)
 
--- Services
 local Players = game:GetService("Players")
-
--- Anti-AFK setup
 local virtualUser = game:GetService("VirtualUser")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+
 local antiAfkEnabled = true
-local timeInAfk = 0
 
 local function startAfkTimer()
     spawn(function()
         while antiAfkEnabled do
             wait(1)
-            timeInAfk = timeInAfk + 1
         end
     end)
 end
-
--- Auto low graphics
--- (moved) Auto low graphics: will be applied once on join below after local flags
 
 local function startAntiAfk()
     spawn(function()
@@ -43,11 +34,9 @@ local function startAntiAfk()
     end)
 end
 
--- Start anti-AFK
 startAntiAfk()
 startAfkTimer()
 
--- Local var
 local autojoinmap = true
 local autojoindojo = true
 local autodifficulty = true
@@ -57,7 +46,68 @@ local autoskipwaves = true
 local autorestart = true
 local autowindojo = true
 
--- Auto low graphics (apply once on join)
+-- ==================== FIRESIGNAL CLICK FUNCTION ====================
+local function clickButton(btn)
+    if not btn then
+        print("❌ [CLICK] Button is nil - GUI path wrong?")
+        return false
+    end
+
+    print("🔍 [CLICK] Attempting to click button:", btn.Name or "Unknown")
+
+    local clicked = false
+
+    -- Primary Method: firesignal on MouseButton1Click
+    if btn.MouseButton1Click then
+        local ok, err = pcall(function()
+            firesignal(btn.MouseButton1Click)
+        end)
+        if ok then
+            print("✅ [CLICK] SUCCESS - Used firesignal(MouseButton1Click) on", btn.Name)
+            clicked = true
+        else
+            print("⚠️ [CLICK] firesignal(MouseButton1Click) failed:", err)
+        end
+    end
+
+    -- Secondary Method: firesignal on Activated
+    if not clicked and btn.Activated then
+        local ok, err = pcall(function()
+            firesignal(btn.Activated)
+        end)
+        if ok then
+            print("✅ [CLICK] SUCCESS - Used firesignal(Activated) on", btn.Name)
+            clicked = true
+        else
+            print("⚠️ [CLICK] firesignal(Activated) failed:", err)
+        end
+    end
+
+    -- Fallback: Try multiple firesignal attempts
+    if not clicked then
+        local signals = {"Touched", "InputBegan", "InputEnded"}
+        for _, signalName in ipairs(signals) do
+            if not clicked and btn:FindFirstChild(signalName) then
+                local ok, err = pcall(function()
+                    firesignal(btn[signalName])
+                end)
+                if ok then
+                    print("✅ [CLICK] SUCCESS - Used firesignal(" .. signalName .. ") on", btn.Name)
+                    clicked = true
+                    break
+                end
+            end
+        end
+    end
+
+    if not clicked then
+        print("❌ [CLICK] firesignal methods failed for", btn.Name)
+    end
+
+    return clicked
+end
+
+-- Low graphics
 if autolowgraphics then
     task.spawn(function()
         local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -66,7 +116,6 @@ if autolowgraphics then
                 ReplicatedStorage:WaitForChild("RemoteFunctions"):WaitForChild("ChangeSetting"):InvokeServer("st_graphics", 2)
             end)
         end
-
         local player = Players.LocalPlayer
         if player then
             if player.Character then
@@ -86,212 +135,205 @@ if autolowgraphics then
     end)
 end
 
--- Rafflesia tracking state
 local rafflesiaConfigs = {
-    {
-        id = 1,
-        position = vector.create(108.30317687988281, 1.244179606437683, -83.53508758544922),
-        cf = CFrame.new(108.30317687988281, 1.244179606437683, -83.53508758544922, 0.9814555048942566, -0.000022965787138673477, 0.19169050455093384, 1.818989620386291e-12, 1.0000001192092896, 0.00011980656563537195, -0.19169053435325623, -0.00011758481559809297, 0.981455385684967),
-        rotation = 180
-    },
-    {
-        id = 2,
-        position = vector.create(91.8934555053711, 1.2442028522491455, 78.30784606933594),
-        cf = CFrame.new(91.8934555053711, 1.2442028522491455, 78.30784606933594, -0.19169051945209503, -0.00023516961664427072, -0.981455385684967, 3.637978807091713e-12, 1, -0.0002396131312707439, 0.9814554452896118, -0.00004593157063936815, -0.19169050455093384),
-        rotation = 180
-    },
-    {
-        id = 3,
-        position = vector.create(-91.36727905273438, 1.244154453277588, 89.73824310302734),
-        cf = CFrame.new(-91.36727905273438, 1.244154453277588, 89.73824310302734, 0.19905993342399597, -0.0002344665990676731, 0.9799873232841492, -3.637978807091713e-12, 1, 0.00023925471759866923, -0.979987382888794, -0.000047626032028347254, 0.19905991852283478),
-        rotation = 180
-    },
-    {
-        id = 4,
-        position = vector.create(-75.59390258789062, 1.24399995803833, -119.80378723144531),
-        cf = CFrame.new(-75.59390258789062, 1.24399995803833, -119.80378723144531, 0.7032743096351624, 0, 0.7109186053276062, -0, 1, -0, -0.7109186053276062, 0, 0.7032743096351624),
-        rotation = 180
-    }
+    {id = 1, pathIndex = 1, position = vector.create(109.5140609741211, 1.244499921798706, -79.5855484008789), distanceAlongPath = 24.42516750300434, cf = CFrame.new(109.5140609741211, 1.244499921798706, -79.5855484008789, 0.9242029190063477, 0, 0.38190197944641113, 0, 1.0000001192092896, 0, -0.3819020390510559, 0, 0.9242027997970581), rotation = 180},
+    {id = 2, pathIndex = 2, position = vector.create(103.5494155883789, 1.24399995803833, 84.38250732421875), distanceAlongPath = 35.06952962828211, cf = CFrame.new(103.5494155883789, 1.24399995803833, 84.38250732421875, -0.7071068286895752, 0, -0.7071067690849304, 0, 1, 0, 0.7071068286895752, 0, -0.7071067690849304), rotation = 180},
+    {id = 3, pathIndex = 3, position = vector.create(-88.65179443359375, 1.244499921798706, 90.4043960571289), distanceAlongPath = 22.919048597364792, cf = CFrame.new(-88.65179443359375, 1.244499921798706, 90.4043960571289, 0.3819020390510559, 0, 0.9242027997970581, 0, 1.0000001192092896, 0, -0.9242029190063477, 0, 0.38190197944641113), rotation = 180},
+    {id = 4, pathIndex = 4, position = vector.create(-70.28559875488281, 1.244499921798706, -112.70679473876953), distanceAlongPath = 23.98892907360944, cf = CFrame.new(-70.28559875488281, 1.244499921798706, -112.70679473876953, 0.9242029190063477, 0, 0.38190197944641113, 0, 1.0000001192092896, 0, -0.3819020390510559, 0, 0.9242027997970581), rotation = 180}
 }
 
--- Get the number of placed Rafflesias using the Units label's Text property
-local function getPlacedRafflesiaCount()
+local placementRandom = Random.new()
+local placementRandomization = {distanceScale = 0.10, xOffset = 1.5, zOffset = 1.5}
+
+local function getPlacedUnitCount()
     local player = Players.LocalPlayer
     if not player then return 0 end
     local units = player:FindFirstChild("PlayerGui")
-    if units then
-        units = units:FindFirstChild("GameGui")
-    end
-    if units then
-        units = units:FindFirstChild("Screen")
-    end
-    if units then
-        units = units:FindFirstChild("Bottom")
-    end
-    if units then
-        units = units:FindFirstChild("Units")
-    end
-
+    if units then units = units:FindFirstChild("GameGui") end
+    if units then units = units:FindFirstChild("Screen") end
+    if units then units = units:FindFirstChild("Bottom") end
+    if units then units = units:FindFirstChild("Units") end
     if units and (units:IsA("TextLabel") or units:IsA("TextButton")) then
         local text = units.Text
-        -- Try to match "Rafflesia: X/Y" or fallback to the first number
-        local placed = text:match("Rafflesia:%s*(%d+)%s*/%s*%d+") or text:match("^(%d+)%s*/%s*%d+")
+        local placed = text:match("^(%d+)%s*/%s*%d+")
         return tonumber(placed) or 0
     end
     return 0
 end
 
--- Randomize position by ±5% of X and Z for Rafflesia
-local function randomizeRafflesiaPosition(config)
-    local x = config.position.X
-    local y = config.position.Y
-    local z = config.position.Z
-    local xOffset = (math.random() - 0.5) * 0.10 * math.abs(x)
-    local zOffset = (math.random() - 0.5) * 0.10 * math.abs(z)
-    local newX = x + xOffset
-    local newZ = z + zOffset
-    local newPos = vector.create(newX, y, newZ)
-    local _, _, _, r00, r01, r02, r10, r11, r12, r20, r21, r22 = config.cf:GetComponents()
-    local newCF = CFrame.new(newX, y, newZ, r00, r01, r02, r10, r11, r12, r20, r21, r22)
+local function randomizePlacement(config)
+    local baseDistance = config.distanceAlongPath
+    local distanceOffset = placementRandom:NextNumber(-0.5, 0.5) * placementRandomization.distanceScale * baseDistance
+    local xOffset = placementRandom:NextNumber(-placementRandomization.xOffset, placementRandomization.xOffset)
+    local zOffset = placementRandom:NextNumber(-placementRandomization.zOffset, placementRandomization.zOffset)
+    local positionOffset = Vector3.new(xOffset, 0, zOffset)
     return {
         Valid = true,
-        PathIndex = config.id,
-        Position = newPos,
-        DistanceAlongPath = config.DistanceAlongPath,
-        CF = newCF,
+        PathIndex = config.pathIndex,
+        Position = config.position + positionOffset,
+        DistanceAlongPath = baseDistance + distanceOffset,
+        CF = config.cf + positionOffset,
         Rotation = config.rotation
     }
 end
 
--- Auto join map
-if autojoinmap then
+-- Auto Join Map / Dojo / Difficulty (unchanged)
+if autojoinmap then task.spawn(function() while autojoinmap do if game.PlaceId == 108533757090220 then local char = game.Players.LocalPlayer.Character if char then local pl = char:FindFirstChild("HumanoidRootPart") local humanoid = char:FindFirstChild("Humanoid") if pl and humanoid then pl.CFrame = CFrame.new(82, 66, 784) end end end task.wait(1) end end) end
+if autojoindojo then task.spawn(function() while autojoindojo do pcall(function() game:GetService("ReplicatedStorage").RemoteFunctions.LobbySetMap_27:InvokeServer("map_christmas") end) task.wait(1) end end) end
+if autodifficulty then task.spawn(function() while autodifficulty do if game.PlaceId ~= 108533757090220 then pcall(function() game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("PlaceDifficultyVote"):InvokeServer("dif_apocalypse") end) end task.wait(1) end end) end
+
+-- ==================== AUTO SKIP WAVES (with debug) ====================
+if autoskipwaves then
     task.spawn(function()
-        while autojoinmap do
-            if game.PlaceId == 108533757090220 then
-                local char = game.Players.LocalPlayer.Character
-                if char then
-                    local pl = char:FindFirstChild("HumanoidRootPart")
-                    local humanoid = char:FindFirstChild("Humanoid")
-                    if pl and humanoid then
-                        local location = CFrame.new(82, 66, 784)
-                        humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
-                        pl.CFrame = location
+        while autoskipwaves do
+            pcall(function()
+                local player = Players.LocalPlayer
+                if not player or not player.PlayerGui then return end
+
+                local waveControls = player.PlayerGui:FindFirstChild("GameGuiNoInset", true)
+                    and player.PlayerGui.GameGuiNoInset:FindFirstChild("Screen", true)
+                    and player.PlayerGui.GameGuiNoInset.Screen:FindFirstChild("Top", true)
+                    and player.PlayerGui.GameGuiNoInset.Screen.Top:FindFirstChild("WaveControls", true)
+
+                if waveControls then
+                    local autoSkip = waveControls:FindFirstChild("AutoSkip")
+                    if autoSkip then
+                        local uistroke = autoSkip:FindFirstChildOfClass("UIStroke")
+                        if uistroke then
+                            if uistroke.Color == Color3.fromRGB(43, 28, 0) then
+                                print("🟡 [SKIP] AutoSkip is OFF → Clicking now")
+                                clickButton(autoSkip)
+                                task.wait(1.8)
+                            else
+                                print("🟢 [SKIP] AutoSkip already ON")
+                            end
+                        else
+                            print("⚠️ [SKIP] No UIStroke found on AutoSkip")
+                        end
+                    else
+                        print("⚠️ [SKIP] AutoSkip button not found")
                     end
+                else
+                    print("⚠️ [SKIP] WaveControls GUI not found yet")
                 end
-            end
-            task.wait(1)
+            end)
+            task.wait(1.5)
         end
     end)
 end
 
--- Auto join christmas
-if autojoindojo then
+-- ==================== AUTO SPEED x3 (with debug) ====================
+if autospeedchange then
     task.spawn(function()
-        while autojoindojo do
-            local args = {[1] = "map_christmas"}
+        while autospeedchange do
             pcall(function()
-                game:GetService("ReplicatedStorage").RemoteFunctions.LobbySetMap_5:InvokeServer(unpack(args))
+                local player = Players.LocalPlayer
+                if not player or not player.PlayerGui then return end
+
+                local tickSpeedFrame = player.PlayerGui:FindFirstChild("GameGuiNoInset", true)
+                    and player.PlayerGui.GameGuiNoInset:FindFirstChild("Screen", true)
+                    and player.PlayerGui.GameGuiNoInset.Screen:FindFirstChild("Top", true)
+                    and player.PlayerGui.GameGuiNoInset.Screen.Top:FindFirstChild("WaveControls", true)
+                    and player.PlayerGui.GameGuiNoInset.Screen.Top.WaveControls:FindFirstChild("TickSpeed")
+
+                if tickSpeedFrame then
+                    local speed3 = tickSpeedFrame:FindFirstChild("Items", true) and tickSpeedFrame.Items:FindFirstChild("3")
+                    if speed3 then
+                        local uistroke = speed3:FindFirstChildOfClass("UIStroke")
+                        if uistroke and uistroke.Color == Color3.fromRGB(58, 58, 58) then
+                            print("🟡 [SPEED] x3 button is not selected → Clicking now")
+                            clickButton(speed3)
+                            task.wait(1.8)
+                        else
+                            print("🟢 [SPEED] x3 already active")
+                        end
+                    else
+                        print("⚠️ [SPEED] Speed3 button not found")
+                    end
+                else
+                    print("⚠️ [SPEED] TickSpeed GUI not found yet")
+                end
+            end)
+            task.wait(2)
+        end
+    end)
+end
+
+-- ==================== AUTO RESTART (with debug) ====================
+if autorestart then
+    task.spawn(function()
+        while autorestart do
+            pcall(function()
+                local player = Players.LocalPlayer
+                if not player or not player.PlayerGui then return end
+
+                local gameGui = player.PlayerGui:FindFirstChild("GameGui")
+                if gameGui and gameGui:FindFirstChild("Screen") then
+                    local middle = gameGui.Screen:FindFirstChild("Middle")
+                    if middle and middle:FindFirstChild("GameEnd") then
+                        local againBtn = middle.GameEnd:FindFirstChild("Items", true)
+                            and middle.GameEnd.Items:FindFirstChild("Frame", true)
+                            and middle.GameEnd.Items.Frame:FindFirstChild("Actions", true)
+                            and middle.GameEnd.Items.Frame.Actions:FindFirstChild("Items", true)
+                            and middle.GameEnd.Items.Frame.Actions.Items:FindFirstChild("Again")
+
+                        if againBtn then
+                            local gamepadButton = againBtn:FindFirstChild("GamepadButton")
+                            if gamepadButton then
+                                print("🟡 [RESTART] Game lost detected → Clicking Again button")
+                                clickButton(againBtn)
+                                task.wait(5)
+                            else
+                                print("🟢 [RESTART] Game still running (no GamepadButton)")
+                            end
+                        else
+                            print("⚠️ [RESTART] Again button not found yet")
+                        end
+                    end
+                end
             end)
             task.wait(1)
         end
     end)
 end
 
--- Auto difficulty
-if autodifficulty then
-    task.spawn(function()
-        while autodifficulty do
-            if game.PlaceId ~= 108533757090220 then
-                pcall(function()
-                    local args = {[1] = "dif_apocalypse"}
-                    game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("PlaceDifficultyVote"):InvokeServer(unpack(args))
-                end)
-            end
-            task.wait(1)
-        end
-    end)
-end
-
--- Auto change speed
-if autospeedchange then
-    task.spawn(function()
-        local speedTimer = 0
-        while autospeedchange do
-            if game.PlaceId ~= 108533757090220 then
-                if speedTimer < 5 then
-                    pcall(function()
-                        local args = {[1] = 3}
-                        game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("ChangeTickSpeed"):InvokeServer(unpack(args))
-                    end)
-                    speedTimer = speedTimer + 1
-                end
-            end
-            task.wait(1)
-        end
-    end)
-end
-
--- Auto skip waves
-if autoskipwaves then
-    task.spawn(function()
-        while autoskipwaves do
-            if game.PlaceId ~= 108533757090220 then
-                pcall(function()
-                    local args = {[1] = "y"}
-                    game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("SkipWave"):InvokeServer(unpack(args))
-                    print("Wave skipped")
-                end)
-            end
-            task.wait(0.2)
-        end
-    end)
-end
-
--- Auto restart
-if autorestart then
-    task.spawn(function()
-        while autorestart do
-            if game.PlaceId ~= 108533757090220 then
-                pcall(function()
-                    game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("RestartGame"):InvokeServer()
-                end)
-            end
-            task.wait(1)
-        end
-    end)
-end
-
+-- ==================== AUTO PLACE RAFFLESIA ====================
 if autowindojo then
     task.spawn(function()
         while autowindojo do
-            if game.PlaceId ~= 108533757090220 then
-                local placedCount = getPlacedRafflesiaCount()
-                if placedCount < #rafflesiaConfigs then
-                    local config = rafflesiaConfigs[placedCount + 1]
-                    local randomizedPlacement = randomizeRafflesiaPosition(config)
-                    local args = { "unit_rafflesia", randomizedPlacement }
-                    local success, result = pcall(function()
-                        return game:GetService("ReplicatedStorage")
-                            :WaitForChild("RemoteFunctions")
-                            :WaitForChild("PlaceUnit")
-                            :InvokeServer(unpack(args))
-                    end)
-                    print("Attempting to place Rafflesia ID " .. config.id .. " (Placed: " .. placedCount .. ", Position: " .. tostring(randomizedPlacement.Position) .. ") Result: " .. tostring(result))
-                    -- Wait and verify via UI count
-                    task.wait(0.1)
-                    local newCount = getPlacedRafflesiaCount()
-                    if newCount > placedCount then
-                        print("✓ Rafflesia ID " .. config.id .. " placed successfully! New count: " .. newCount)
-                    else
-                        print("✗ Rafflesia ID " .. config.id .. " placement failed. Retrying...")
-                        task.wait(2)
+            local ok, err = pcall(function()
+                if game.PlaceId ~= 108533757090220 then
+                    local placedCount = getPlacedUnitCount()
+                    if placedCount < #rafflesiaConfigs then
+                        local config = rafflesiaConfigs[placedCount + 1]
+                        local randomizedPlacement = randomizePlacement(config)
+                        local args = {"unit_rafflesia", randomizedPlacement}
+
+                        local success, result = pcall(function()
+                            return game:GetService("ReplicatedStorage")
+                                :WaitForChild("RemoteFunctions")
+                                :WaitForChild("PlaceUnit")
+                                :InvokeServer(unpack(args))
+                        end)
+
+                        print("Attempting Rafflesia ID " .. config.id .. " (Placed: " .. placedCount .. ") Result: " .. tostring(result))
+
+                        task.wait(0.1)
+                        local newCount = getPlacedUnitCount()
+                        if newCount > placedCount then
+                            print("✓ Rafflesia ID " .. config.id .. " placed! New count: " .. newCount)
+                        else
+                            print("✗ Rafflesia ID " .. config.id .. " failed. Retrying...")
+                            task.wait(2)
+                        end
                     end
                 end
-            end
-            task.wait(2)
+            end)
+            if not ok then warn("Auto Rafflesia error:", err) end
+            task.wait(0.5)
         end
     end)
 end
 
-print("GTD script loaded successfully")
-print("Anti-AFK enabled")
+print("✅ FULL GTD SCRIPT LOADED - FIRESIGNAL CLICK METHOD ENABLED")
+print("Watch the console for 🔍 [CLICK] messages!")
