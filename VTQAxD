@@ -106,7 +106,10 @@ end
 
 -- ==================== DISCORD WEBHOOK TRACKER SENDER ====================
 local function sendMatchStatsToDiscord()
-    if webhookURL == "https://discord.com/api/webhooks/1513219108181643265/wLnwauMySrgxBSCo8IRwTDHKVI8RbLXRwT7hvjVQ_ly0PKCWKkVn_Zbsv4CR4EYgfAJQ" or webhookURL == "" then return end
+    if not webhookURL or webhookURL == "" or string.find(webhookURL, "YOUR_DISCORD") then 
+        warn("⚠️ Webhook URL is invalid or unconfigured.")
+        return 
+    end
     
     pcall(function()
         local leaderstats = LocalPlayer:FindFirstChild("leaderstats")
@@ -153,8 +156,8 @@ local function sendMatchStatsToDiscord()
 
         local jsonPayload = HttpService:JSONEncode(payload)
         
-        -- Send Request using appropriate exploit HTTP libraries
-        local requestMethod = syn and syn.request or http and http.request or http_request or request
+        -- Multi-exploit compatible request router (handles Synapse, Wave, Solara, Celery, Electron, etc.)
+        local requestMethod = task.defer and (request or http_request or (http and http.request) or (syn and syn.request))
         if requestMethod then
             requestMethod({
                 Url = webhookURL,
@@ -163,7 +166,7 @@ local function sendMatchStatsToDiscord()
                 Body = jsonPayload
             })
         else
-            warn("❌ Exploits HTTP requests framework missing! Unable to send webhook payload.")
+            warn("❌ Exploits HTTP requests framework missing! Webhook execution blocked.")
         end
     end)
 end
@@ -332,6 +335,7 @@ if autospeedchange then
 
                     if waveControls then
                         local tickSpeed = waveControls:FindFirstChild("TickSpeed")
+                        -- Target path changed back to UI index '3' for premium x3 speed validation
                         local speed3 = tickSpeed and tickSpeed:FindFirstChild("Items", true) and tickSpeed.Items:FindFirstChild("3")
                         if speed3 then
                             local uistroke = speed3:FindFirstChildOfClass("UIStroke")
