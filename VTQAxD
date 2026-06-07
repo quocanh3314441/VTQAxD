@@ -106,7 +106,7 @@ end
 
 -- ==================== DISCORD WEBHOOK TRACKER SENDER ====================
 local function sendMatchStatsToDiscord()
-    if webhookURL == "YOUR_DISCORD_WEBHOOK_URL_HERE" or webhookURL == "" then return end
+    if webhookURL == "https://discord.com/api/webhooks/1513219108181643265/wLnwauMySrgxBSCo8IRwTDHKVI8RbLXRwT7hvjVQ_ly0PKCWKkVn_Zbsv4CR4EYgfAJQ" or webhookURL == "" then return end
     
     pcall(function()
         local leaderstats = LocalPlayer:FindFirstChild("leaderstats")
