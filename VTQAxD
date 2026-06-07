@@ -1,6 +1,6 @@
--- Farm Map / Flower & Shroom Macro - TRANSPARENT SEEDS TRACKER VERSION
--- PROJECT NAME: GTD VOLCANO FARM SCRIPT
 task.wait(5)
+-- Farm Map / Flower & Shroom Macro - WEBHOOK & SEEDS TRACKER VERSION
+-- PROJECT NAME: GTD VOLCANO FARM SCRIPT
 local currentversion = "Garden Tower Defense-VTQAxD"
 
 if not vector or not vector.create then
@@ -14,7 +14,9 @@ end
 game:GetService("RunService"):Set3dRenderingEnabled(false)
 
 local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
 local virtualUser = game:GetService("VirtualUser")
+local LocalPlayer = Players.LocalPlayer
 
 local antiAfkEnabled = true
 local timeInAfk = 0
@@ -41,6 +43,10 @@ end
 startAntiAfk()
 startAfkTimer()
 
+-- ==================== WEBHOOK CONFIGURATION ====================
+local webhookURL = "https://discord.com/api/webhooks/1513219108181643265/wLnwauMySrgxBSCo8IRwTDHKVI8RbLXRwT7hvjVQ_ly0PKCWKkVn_Zbsv4CR4EYgfAJQ"
+local pingUser = true -- Set to true to ping your Discord ID if desired
+
 local autojoinmap = true
 local autojoindojo = true
 local autodifficulty = true   
@@ -55,6 +61,7 @@ local autoseedstracker = true
 -- STATE TRACKING FLAGS
 local isTeleporting = false
 local hasVotedDifficulty = false
+local hasSentWebhookThisRound = false
 
 -- ==================== FIRESIGNAL CLICK ENGINE ====================
 local function clickButton(btn)
@@ -92,18 +99,80 @@ if autolowgraphics then
                 ReplicatedStorage:WaitForChild("RemoteFunctions"):WaitForChild("ChangeSetting"):InvokeServer("st_graphics", 2)
             end)
         end
-        local player = Players.LocalPlayer
+        local player = LocalPlayer
         if player and player.Character then applyOnce() else player.CharacterAdded:Wait(); applyOnce() end
+    end)
+end
+
+-- ==================== DISCORD WEBHOOK TRACKER SENDER ====================
+local function sendMatchStatsToDiscord()
+    if webhookURL == "YOUR_DISCORD_WEBHOOK_URL_HERE" or webhookURL == "" then return end
+    
+    pcall(function()
+        local leaderstats = LocalPlayer:FindFirstChild("leaderstats")
+        local seeds = leaderstats and leaderstats:FindFirstChild("Seeds") and leaderstats.Seeds.Value or "Unknown"
+        
+        -- Pull endgame status data from UI
+        local gameGui = LocalPlayer.PlayerGui:FindFirstChild("GameGui")
+        local titleText = "Match Finished"
+        local waveText = "Unknown"
+        local durationText = string.format("%dm %ds", math.floor(timeInAfk / 60), timeInAfk % 60)
+        
+        local gameEndFrame = gameGui and gameGui:FindFirstChild("Screen") 
+            and gameGui.Screen:FindFirstChild("Middle") 
+            and gameGui.Screen.Middle:FindFirstChild("GameEnd")
+            and gameGui.Screen.Middle.GameEnd:FindFirstChild("Items")
+            and gameGui.Screen.Middle.GameEnd.Items:FindFirstChild("Frame")
+
+        if gameEndFrame then
+            local winStatus = gameEndFrame:FindFirstChild("Title")
+            if winStatus then titleText = winStatus.Text end
+            
+            local waveLabel = gameEndFrame:FindFirstChild("Wave")
+            if waveLabel then waveText = waveLabel.Text end
+        end
+
+        local colorCode = string.find(string.lower(titleText), "vict") and 65280 or 16711680 -- Green for Victory, Red for Defeat
+
+        local payload = {
+            ["content"] = pingUser and "@here" or "",
+            ["embeds"] = {{
+                ["title"] = "📊 " .. titleText:upper() .. " - GTD Volcano Logger",
+                ["description"] = "A match has concluded on **Volcano (Hell)**.",
+                ["color"] = colorCode,
+                ["fields"] = {
+                    {["name"] = "👤 Account Username", ["value"] = "||" .. LocalPlayer.Name .. "||", ["inline"] = true},
+                    {["name"] = "🌱 Current Seeds Balance", ["value"] = "Value: **" .. tostring(seeds) .. "**", ["inline"] = true},
+                    {["name"] = "⚔️ Performance", ["value"] = tostring(waveText), ["inline"] = false},
+                    {["name"] = "⏱️ Match Runtime", ["value"] = durationText, ["inline"] = true}
+                },
+                ["footer"] = {["text"] = "GTD Automation System • " .. currentversion},
+                ["timestamp"] = DateTime.now():ToISO8String()
+            }}
+        }
+
+        local jsonPayload = HttpService:JSONEncode(payload)
+        
+        -- Send Request using appropriate exploit HTTP libraries
+        local requestMethod = syn and syn.request or http and http.request or http_request or request
+        if requestMethod then
+            requestMethod({
+                Url = webhookURL,
+                Method = "POST",
+                Headers = {["Content-Type"] = "application/json"},
+                Body = jsonPayload
+            })
+        else
+            warn("❌ Exploits HTTP requests framework missing! Unable to send webhook payload.")
+        end
     end)
 end
 
 -- ==================== INTEGRATED SEEDS TRACKER (80% TRANSPARENT) ====================
 local function initializeSeedsTracker()
-    local LocalPlayer = Players.LocalPlayer
     local leaderstats = LocalPlayer:WaitForChild("leaderstats", 10)
     local seedsValue = leaderstats and leaderstats:WaitForChild("Seeds", 10)
 
-    -- Prevent duplicates
     local oldGui = LocalPlayer:WaitForChild("PlayerGui"):FindFirstChild("SeedsTrackerGui")
     if oldGui then oldGui:Destroy() end
 
@@ -170,7 +239,6 @@ local function initializeSeedsTracker()
     else
         SeedsLabel.Text = "Seeds Data Missing"
         SeedsLabel.TextColor3 = Color3.fromRGB(240, 100, 100)
-        warn("❌ [GUI ERROR] Could not locate game.Players.LocalPlayer.leaderstats.Seeds path.")
     end
 end
 
@@ -206,7 +274,7 @@ if autojoinmap then
     task.spawn(function()
         while autojoinmap do
             if game.PlaceId == 108533757090220 then
-                local char = game.Players.LocalPlayer.Character
+                local char = LocalPlayer.Character
                 if char and char:FindFirstChild("HumanoidRootPart") then
                     char.HumanoidRootPart.CFrame = CFrame.new(154, 67, 786)
                 end
@@ -242,7 +310,6 @@ if autodifficulty then
             if game.PlaceId ~= 108533757090220 and not hasVotedDifficulty then
                 pcall(function()
                     local args = { "dif_hell" }
-                    print("🟡 [REMOTE DIFFICULTY] Sending Hell Mode Difficulty Vote Remote Request")
                     game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("PlaceDifficultyVote"):InvokeServer(unpack(args))
                     hasVotedDifficulty = true 
                 end)
@@ -258,11 +325,10 @@ if autospeedchange then
         while autospeedchange do
             if game.PlaceId ~= 108533757090220 then
                 pcall(function()
-                    local player = Players.LocalPlayer
-                    local waveControls = player.PlayerGui:FindFirstChild("GameGuiNoInset", true)
-                        and player.PlayerGui.GameGuiNoInset:FindFirstChild("Screen", true)
-                        and player.PlayerGui.GameGuiNoInset.Screen:FindFirstChild("Top", true)
-                        and player.PlayerGui.GameGuiNoInset.Screen.Top:FindFirstChild("WaveControls", true)
+                    local waveControls = LocalPlayer.PlayerGui:FindFirstChild("GameGuiNoInset", true)
+                        and LocalPlayer.PlayerGui.GameGuiNoInset:FindFirstChild("Screen", true)
+                        and LocalPlayer.PlayerGui.GameGuiNoInset.Screen:FindFirstChild("Top", true)
+                        and LocalPlayer.PlayerGui.GameGuiNoInset.Screen.Top:FindFirstChild("WaveControls", true)
 
                     if waveControls then
                         local tickSpeed = waveControls:FindFirstChild("TickSpeed")
@@ -270,7 +336,6 @@ if autospeedchange then
                         if speed3 then
                             local uistroke = speed3:FindFirstChildOfClass("UIStroke")
                             if uistroke and uistroke.Color == Color3.fromRGB(58, 58, 58) then
-                                print("🟡 [GUI SPEED] Game is not x3 speed → Adjusting clicker")
                                 clickButton(speed3)
                                 task.wait(2)
                             end
@@ -289,18 +354,16 @@ if autoskipwaves then
         while autoskipwaves do
             if game.PlaceId ~= 108533757090220 then
                 pcall(function()
-                    local player = Players.LocalPlayer
-                    local waveControls = player.PlayerGui:FindFirstChild("GameGuiNoInset", true)
-                        and player.PlayerGui.GameGuiNoInset:FindFirstChild("Screen", true)
-                        and player.PlayerGui.GameGuiNoInset.Screen:FindFirstChild("Top", true)
-                        and player.PlayerGui.GameGuiNoInset.Screen.Top:FindFirstChild("WaveControls", true)
+                    local waveControls = LocalPlayer.PlayerGui:FindFirstChild("GameGuiNoInset", true)
+                        and LocalPlayer.PlayerGui.GameGuiNoInset:FindFirstChild("Screen", true)
+                        and LocalPlayer.PlayerGui.GameGuiNoInset.Screen:FindFirstChild("Top", true)
+                        and LocalPlayer.PlayerGui.GameGuiNoInset.Screen.Top:FindFirstChild("WaveControls", true)
 
                     if waveControls then
                         local autoSkip = waveControls:FindFirstChild("AutoSkip")
                         if autoSkip then
                             local uistroke = autoSkip:FindFirstChildOfClass("UIStroke")
                             if uistroke and uistroke.Color == Color3.fromRGB(43, 28, 0) then
-                                print("🟡 [GUI SKIP] AutoSkip is currently OFF → Toggling ON")
                                 clickButton(autoSkip)
                                 task.wait(2)
                             end
@@ -313,15 +376,14 @@ if autoskipwaves then
     end)
 end
 
--- ==================== OPTIMIZED: GAMEPAD VANISH TIMING LOGIC ====================
+-- ==================== OPTIMIZED: GAMEPAD VANISH TIMING LOGIC + WEBHOOK TRIGGER ====================
 if autorestart then
     task.spawn(function()
         while autorestart do
             pcall(function()
-                local player = Players.LocalPlayer
-                if player and player:FindFirstChild("PlayerGui") then
+                if LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui") then
                     
-                    local screen = player.PlayerGui:FindFirstChild("GameGui") and player.PlayerGui.GameGui:FindFirstChild("Screen")
+                    local screen = LocalPlayer.PlayerGui:FindFirstChild("GameGui") and LocalPlayer.PlayerGui.GameGui:FindFirstChild("Screen")
                     local middle = screen and screen:FindFirstChild("Middle")
                     local gameEnd = middle and middle:FindFirstChild("GameEnd")
                     local items = gameEnd and gameEnd:FindFirstChild("Items")
@@ -332,17 +394,23 @@ if autorestart then
                     local gamepadButton = againBtn and againBtn:FindFirstChild("GamepadButton")
 
                     if gamepadButton then
+                        -- Round is Over, fire webhook exactly once
+                        if not hasSentWebhookThisRound then
+                            hasSentWebhookThisRound = true
+                            task.spawn(sendMatchStatsToDiscord)
+                        end
+
                         if not isTeleporting then
-                            print("🚨 [RESTART] GamepadButton Detected! Match Ended → Clicking Again.")
                             isTeleporting = true
                             clickButton(againBtn)
                         end
                     else
                         if isTeleporting then
-                            print("⏳ [RESTART] GamepadButton gone. Waiting 0.5s for level setup...")
                             task.wait(0.5)
                             isTeleporting = false
                             hasVotedDifficulty = false 
+                            hasSentWebhookThisRound = false -- Reset state array flags for next level cycle
+                            timeInAfk = 0
                         end
                     end
                 end
@@ -358,19 +426,15 @@ if autowindojo then
         while autowindojo do
             if game.PlaceId ~= 108533757090220 then
                 pcall(function()
-                    local player = Players.LocalPlayer
-                    
-                    local unitsLabel = player.PlayerGui:FindFirstChild("GameGui") 
-                        and player.PlayerGui.GameGui:FindFirstChild("Screen")
-                        and player.PlayerGui.GameGui.Screen:FindFirstChild("Bottom")
-                        and player.PlayerGui.GameGui.Screen.Bottom:FindFirstChild("Units")
+                    local unitsLabel = LocalPlayer.PlayerGui:FindFirstChild("GameGui") 
+                        and LocalPlayer.PlayerGui.GameGui:FindFirstChild("Screen")
+                        and LocalPlayer.PlayerGui.GameGui.Screen:FindFirstChild("Bottom")
+                        and LocalPlayer.PlayerGui.GameGui.Screen.Bottom:FindFirstChild("Units")
 
                     if unitsLabel and (unitsLabel:IsA("TextLabel") or unitsLabel:IsA("TextBox")) then
-                        -- Sanitize text string to clear hidden spacing variations
                         local cleanText = string.gsub(unitsLabel.Text, "%s+", "")
                         local currentUnits = tonumber(string.match(cleanText, "^(%d+)"))
 
-                        -- Safe fallback if string pattern logic misfires entirely due to game GUI loading delays
                         if not currentUnits and cleanText ~= "" then
                             currentUnits = tonumber(cleanText)
                         end
@@ -378,8 +442,8 @@ if autowindojo then
                         if currentUnits and unitSequence[currentUnits] then
                             local targetUnit = unitSequence[currentUnits]
                             
-                            local hotbar = player.PlayerGui.GameGui.Screen.Bottom:FindFirstChild("Inventory") 
-                                and player.PlayerGui.GameGui.Screen.Bottom.Inventory:FindFirstChild("Items")
+                            local hotbar = LocalPlayer.PlayerGui.GameGui.Screen.Bottom:FindFirstChild("Inventory") 
+                                and LocalPlayer.PlayerGui.GameGui.Screen.Bottom.Inventory:FindFirstChild("Items")
                             
                             if hotbar then
                                 local card = hotbar:FindFirstChild(targetUnit.Name) or hotbar:FindFirstChild(targetUnit.UI_Name)
@@ -422,6 +486,7 @@ task.spawn(function()
         if game.PlaceId == 108533757090220 then
             isTeleporting = false
             hasVotedDifficulty = false
+            hasSentWebhookThisRound = false
         end
         task.wait(2)
     end
@@ -432,4 +497,4 @@ if autoseedstracker then
     task.spawn(initializeSeedsTracker)
 end
 
-print("✅ GTD VOLCANO FARM SCRIPT - FIXED GENERATOR SYSTEM LOADED")
+print("✅ GTD VOLCANO FARM SCRIPT - WEBHOOK MONITOR ACTIVE")
