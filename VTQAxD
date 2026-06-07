@@ -332,7 +332,7 @@ if autospeedchange then
 
                     if waveControls then
                         local tickSpeed = waveControls:FindFirstChild("TickSpeed")
-                        local speed3 = tickSpeed and tickSpeed:FindFirstChild("Items", true) and tickSpeed.Items:FindFirstChild("2")
+                        local speed3 = tickSpeed and tickSpeed:FindFirstChild("Items", true) and tickSpeed.Items:FindFirstChild("3")
                         if speed3 then
                             local uistroke = speed3:FindFirstChildOfClass("UIStroke")
                             if uistroke and uistroke.Color == Color3.fromRGB(58, 58, 58) then
