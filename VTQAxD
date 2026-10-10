@@ -395,9 +395,9 @@ if autoselectmap then
                 pcall(function()
                     local RF = game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions")
                     
-                    local setMapFunc = RF:FindFirstChild("LobbySetMap_20") or RF:FindFirstChild("LobbySetMap_20") or RF:FindFirstChild("LobbySetMap_20")
-                    local setMaxPlayersFunc = RF:FindFirstChild("LobbySetMaxPlayers_20") or RF:FindFirstChild("LobbySetMaxPlayers_20") or RF:FindFirstChild("LobbySetMaxPlayers_20")
-                    local startLobbyFunc = RF:FindFirstChild("StartLobby_20") or RF:FindFirstChild("StartLobby_20") or RF:FindFirstChild("StartLobby_20")
+                    local setMapFunc = RF:FindFirstChild("LobbySetMap_14") or RF:FindFirstChild("LobbySetMap_14") or RF:FindFirstChild("LobbySetMap_14")
+                    local setMaxPlayersFunc = RF:FindFirstChild("LobbySetMaxPlayers_14") or RF:FindFirstChild("LobbySetMaxPlayers_14") or RF:FindFirstChild("LobbySetMaxPlayers_14")
+                    local startLobbyFunc = RF:FindFirstChild("StartLobby_14") or RF:FindFirstChild("StartLobby_14") or RF:FindFirstChild("StartLobby_14")
                     
                     if setMapFunc then
                         setMapFunc:InvokeServer("map_volcano", "dif_impossible", false)
