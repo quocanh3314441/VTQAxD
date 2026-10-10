@@ -1,8 +1,10 @@
-task.wait(5)
--- Farm Map / Flower & Shroom Macro - WEBHOOK & SEEDS TRACKER VERSION
--- PROJECT NAME: GTD VOLCANO FARM SCRIPT
-local currentversion = "Garden Tower Defense-VTQAxD"
+task.wait(3)
+-- ==================== GTD FARM SCRIPT + PERFORMANCE OPTIMIZER ====================
+-- UNIFIED: 5FPS Optimized Farm Automation + Complete Performance Tweaks
+-- SINGLE-MAP MODE: Volcano Map Only ("map_volcano" - Impossible Difficulty)
+local currentversion = "Garden Tower Defense-VTQAxD-5FPS-VOLCANO-ONLY"
 
+-- ==================== VECTOR HANDLER ====================
 if not vector or not vector.create then
     vector = {}
     function vector.create(x, y, z)
@@ -10,495 +12,692 @@ if not vector or not vector.create then
     end
 end
 
--- Disable 3D rendering for optimal multi-account performance
-game:GetService("RunService"):Set3dRenderingEnabled(false)
-
+-- ==================== GAME SERVICES ====================
 local Players = game:GetService("Players")
-local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
 local virtualUser = game:GetService("VirtualUser")
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+local PathfindingService = game:GetService("PathfindingService")
 local LocalPlayer = Players.LocalPlayer
+local Lighting = game:GetService("Lighting")
 
-local antiAfkEnabled = true
-local timeInAfk = 0
+-- ==================== CONFIGURATION ====================
+local LOBBY_PLACE_ID = 108533757090220
+local FPS_MULTIPLIER = 4  -- Multiply all waits by 4x for 5 FPS stability
 
-local function startAfkTimer()
-    task.spawn(function()
-        while antiAfkEnabled do
-            task.wait(1)
-            timeInAfk = timeInAfk + 1
-        end
-    end)
-end
-
-local function startAntiAfk()
-    task.spawn(function()
-        while antiAfkEnabled do
-            task.wait(60)
-            virtualUser:CaptureController()
-            virtualUser:ClickButton2(Vector2.new())
-        end
-    end)
-end
-
-startAntiAfk()
-startAfkTimer()
-
--- ==================== WEBHOOK CONFIGURATION ====================
-local webhookURL = "https://discord.com/api/webhooks/1513219108181643265/wLnwauMySrgxBSCo8IRwTDHKVI8RbLXRwT7hvjVQ_ly0PKCWKkVn_Zbsv4CR4EYgfAJQ"
-local pingUser = true -- Set to true to ping your Discord ID if desired
-
+-- Farm automation config
 local autojoinmap = true
-local autojoindojo = true
+local autoselectmap = true     
 local autodifficulty = true   
 local autospeedchange = true   
 local autolowgraphics = true
 local autoskipwaves = true     
 local autorestart = true       
 local autowindojo = true       
-local autoupgrade = true       
 local autoseedstracker = true  
+local autoPurgeMap = false        
+local autoDeleteCashUI = false    
+local autoDeleteUnitViewer = false
+local autoCloseUnitViewer = true  
 
--- STATE TRACKING FLAGS
+-- Optimizer config
+local antiAfkEnabled = true
+local optimizationsApplied = false
+local skipWavesToggled = false
+
+-- ==================== STATE TRACKING FLAGS ====================
 local isTeleporting = false
 local hasVotedDifficulty = false
-local hasSentWebhookThisRound = false
+local setupCompletedThisRound = false 
+local processedMatchThisRound = false
+local maxUnitsReachedThisRound = 0     
+local isSpammingRestart = false        
+local hasToggledSpeed = false
+local hasToggledSkip = false
+local skipDelayTimer = 0
+local hasEverToggledSkipThisSession = false 
 
--- ==================== FIRESIGNAL CLICK ENGINE ====================
+-- MATCH COUNTER & RANDOM LIMIT STATE (Testing Range: 6 to 9)
+local totalMatchesFinished = 0
+local sessionMatchesFinished = 0
+local targetMatchLimit = math.random(20, 30)
+local matchesFinishedLabel = nil
+local currentMapLabel = nil
+
+-- ==================== UTILITY FUNCTIONS ====================
+local function adaptiveWait(baseSeconds)
+    task.wait(baseSeconds * FPS_MULTIPLIER)
+end
+
+local function updateMatchCounterUI()
+    if matchesFinishedLabel then
+        matchesFinishedLabel.Text = "Session: " .. tostring(sessionMatchesFinished) .. " / " .. tostring(targetMatchLimit) .. " | Total: " .. tostring(totalMatchesFinished)
+    end
+end
+
+local function checkMatchLimitAndTeleport()
+    if sessionMatchesFinished >= targetMatchLimit then
+        print("🎯 Target match limit (" .. sessionMatchesFinished .. "/" .. targetMatchLimit .. ") reached! Teleporting to lobby...")
+        if LocalPlayer then
+            pcall(function()
+                TeleportService:Teleport(LOBBY_PLACE_ID, LocalPlayer)
+            end)
+        end
+        return true
+    end
+    return false
+end
+
+-- ==================== OBSTACLE-AVOIDING MOVEMENT ====================
+local function quickMoveToDestination(targetX, targetY, targetZ)
+    local char = LocalPlayer.Character
+    if not char then return end
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not humanoid or not hrp then return end
+
+    local targetPos = Vector3.new(targetX, targetY, targetZ)
+    local dist = (hrp.Position - targetPos).Magnitude
+
+    -- Close proximity direct movement
+    if dist < 4 then
+        humanoid:MoveTo(targetPos)
+        return
+    end
+
+    -- Create and compute path around obstacles
+    local path = PathfindingService:CreatePath({
+        AgentRadius = 2,
+        AgentHeight = 5,
+        AgentCanJump = true,
+        AgentCanClimb = false,
+        WaypointSpacing = 5
+    })
+
+    local success, _ = pcall(function()
+        path:ComputeAsync(hrp.Position, targetPos)
+    end)
+
+    if success and path.Status == Enum.PathStatus.Success then
+        local waypoints = path:GetWaypoints()
+        local nextWaypoint = waypoints[2] or waypoints[1]
+        if nextWaypoint then
+            if nextWaypoint.Action == Enum.PathWaypointAction.Jump then
+                humanoid.Jump = true
+            end
+            humanoid:MoveTo(nextWaypoint.Position)
+        end
+    else
+        -- Fallback to direct movement if pathing fails
+        humanoid:MoveTo(targetPos)
+    end
+
+    -- Raycast Obstacle Auto-Jump (Triggers jump if wall/part directly ahead)
+    local rayOrigin = hrp.Position
+    local rayDirection = hrp.CFrame.LookVector * 3.5
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterDescendantsInstances = {char}
+    raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+
+    local raycastResult = Workspace:Raycast(rayOrigin, rayDirection, raycastParams)
+    if raycastResult and raycastResult.Instance and raycastResult.Instance.CanCollide then
+        humanoid.Jump = true
+    end
+end
+
+local function getCurrentUnitsCount()
+    local unitsLabel = LocalPlayer.PlayerGui:FindFirstChild("GameGui") 
+        and LocalPlayer.PlayerGui.GameGui.Screen:FindFirstChild("Bottom")
+        and LocalPlayer.PlayerGui.GameGui.Screen.Bottom:FindFirstChild("Units")
+
+    if unitsLabel and (unitsLabel:IsA("TextLabel") or unitsLabel:IsA("TextBox")) then
+        local cleanText = string.gsub(unitsLabel.Text, "%s+", "")
+        local currentUnits = tonumber(string.match(cleanText, "^(%d+)"))
+        if not currentUnits and cleanText ~= "" then
+            currentUnits = tonumber(cleanText)
+        end
+        return currentUnits
+    end
+    return nil
+end
+
 local function clickButton(btn)
     if not btn then return false end
     local clicked = false
-
-    if btn.MouseButton1Click then
-        local ok, err = pcall(function() firesignal(btn.MouseButton1Click) end)
-        if ok then clicked = true end
-    end
-
-    if not clicked and btn.Activated then
-        local ok, err = pcall(function() firesignal(btn.Activated) end)
-        if ok then clicked = true end
-    end
-
+    if btn.MouseButton1Click then pcall(function() firesignal(btn.MouseButton1Click) clicked=true end) end
+    if not clicked and btn.Activated then pcall(function() firesignal(btn.Activated) clicked=true end) end
     if not clicked then
-        local signals = {"Touched", "InputBegan", "InputEnded"}
-        for _, signalName in ipairs(signals) do
-            if not clicked and btn:FindFirstChild(signalName) then
-                local ok, err = pcall(function() firesignal(btn[signalName]) end)
-                if ok then clicked = true; break end
-            end
+        for _, s in ipairs({"Touched", "InputBegan", "InputEnded"}) do
+            if btn:FindFirstChild(s) then pcall(function() firesignal(btn[s]) clicked=true end); break end
         end
     end
-
     return clicked
 end
 
-if autolowgraphics then
+-- ==================== ANTI-AFK ====================
+local function startAntiAfk()
     task.spawn(function()
-        local ReplicatedStorage = game:GetService("ReplicatedStorage")
-        local function applyOnce()
-            pcall(function()
-                ReplicatedStorage:WaitForChild("RemoteFunctions"):WaitForChild("ChangeSetting"):InvokeServer("st_graphics", 2)
-            end)
+        while antiAfkEnabled do
+            adaptiveWait(15)
+            virtualUser:CaptureController()
+            virtualUser:ClickButton2(Vector2.new())
         end
-        local player = LocalPlayer
-        if player and player.Character then applyOnce() else player.CharacterAdded:Wait(); applyOnce() end
     end)
 end
 
--- ==================== DISCORD WEBHOOK TRACKER SENDER ====================
-local function sendMatchStatsToDiscord()
-    if not webhookURL or webhookURL == "" or string.find(webhookURL, "YOUR_DISCORD") then 
-        warn("⚠️ Webhook URL is invalid or unconfigured.")
-        return 
-    end
-    
+-- ==================== PERFORMANCE OPTIMIZER ====================
+local function disable3DRendering()
+    pcall(function() RunService:Set3dRenderingEnabled(false) end)
+end
+
+local function optimizeGPU()
     pcall(function()
-        local leaderstats = LocalPlayer:FindFirstChild("leaderstats")
-        local seeds = leaderstats and leaderstats:FindFirstChild("Seeds") and leaderstats.Seeds.Value or "Unknown"
-        
-        -- Pull endgame status data from UI
-        local gameGui = LocalPlayer.PlayerGui:FindFirstChild("GameGui")
-        local titleText = "Match Finished"
-        local waveText = "Unknown"
-        local durationText = string.format("%dm %ds", math.floor(timeInAfk / 60), timeInAfk % 60)
-        
-        local gameEndFrame = gameGui and gameGui:FindFirstChild("Screen") 
-            and gameGui.Screen:FindFirstChild("Middle") 
-            and gameGui.Screen.Middle:FindFirstChild("GameEnd")
-            and gameGui.Screen.Middle.GameEnd:FindFirstChild("Items")
-            and gameGui.Screen.Middle.GameEnd.Items:FindFirstChild("Frame")
-
-        if gameEndFrame then
-            local winStatus = gameEndFrame:FindFirstChild("Title")
-            if winStatus then titleText = winStatus.Text end
-            
-            local waveLabel = gameEndFrame:FindFirstChild("Wave")
-            if waveLabel then waveText = waveLabel.Text end
+        Lighting.GlobalShadows = false
+        Lighting.ShadowSoftness = 0
+        Lighting.EnvironmentBlendParameter = 0
+        for _, effect in ipairs(Lighting:GetChildren()) do
+            if effect:IsA("PostEffect") or effect:IsA("BloomEffect") or effect:IsA("BlurEffect") or effect:IsA("DepthOfFieldEffect") or effect:IsA("SunRaysEffect") then
+                effect.Enabled = false
+            end
         end
-
-        local colorCode = string.find(string.lower(titleText), "vict") and 65280 or 16711680 -- Green for Victory, Red for Defeat
-
-        local payload = {
-            ["content"] = pingUser and "@here" or "",
-            ["embeds"] = {{
-                ["title"] = "📊 " .. titleText:upper() .. " - GTD Volcano Logger",
-                ["description"] = "A match has concluded on **Volcano (Hell)**.",
-                ["color"] = colorCode,
-                ["fields"] = {
-                    {["name"] = "👤 Account Username", ["value"] = "||" .. LocalPlayer.Name .. "||", ["inline"] = true},
-                    {["name"] = "🌱 Current Seeds Balance", ["value"] = "Value: **" .. tostring(seeds) .. "**", ["inline"] = true},
-                    {["name"] = "⚔️ Performance", ["value"] = tostring(waveText), ["inline"] = false},
-                    {["name"] = "⏱️ Match Runtime", ["value"] = durationText, ["inline"] = true}
-                },
-                ["footer"] = {["text"] = "GTD Automation System • " .. currentversion},
-                ["timestamp"] = DateTime.now():ToISO8String()
-            }}
-        }
-
-        local jsonPayload = HttpService:JSONEncode(payload)
-        
-        -- Multi-exploit compatible request router (handles Synapse, Wave, Solara, Celery, Electron, etc.)
-        local requestMethod = task.defer and (request or http_request or (http and http.request) or (syn and syn.request))
-        if requestMethod then
-            requestMethod({
-                Url = webhookURL,
-                Method = "POST",
-                Headers = {["Content-Type"] = "application/json"},
-                Body = jsonPayload
-            })
-        else
-            warn("❌ Exploits HTTP requests framework missing! Webhook execution blocked.")
+        for _, part in ipairs(Workspace:GetDescendants()) do
+            if part:IsA("BasePart") then part.CastShadow = false end
         end
     end)
 end
 
--- ==================== INTEGRATED SEEDS TRACKER (80% TRANSPARENT) ====================
-local function initializeSeedsTracker()
-    local leaderstats = LocalPlayer:WaitForChild("leaderstats", 10)
-    local seedsValue = leaderstats and leaderstats:WaitForChild("Seeds", 10)
-
-    local oldGui = LocalPlayer:WaitForChild("PlayerGui"):FindFirstChild("SeedsTrackerGui")
-    if oldGui then oldGui:Destroy() end
-
-    local ScreenGui = Instance.new("ScreenGui")
-    ScreenGui.Name = "SeedsTrackerGui"
-    ScreenGui.ResetOnSpawn = false
-    ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
-
-    local MainFrame = Instance.new("Frame")
-    MainFrame.Name = "MainFrame"
-    MainFrame.Size = UDim2.new(0.5, 0, 0.5, 0)
-    MainFrame.Position = UDim2.new(0.25, 0, 0.25, 0)
-    MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
-    MainFrame.BackgroundTransparency = 0.8
-    MainFrame.BorderSizePixel = 0
-    MainFrame.Parent = ScreenGui
-
-    local FrameCorner = Instance.new("UICorner")
-    FrameCorner.CornerRadius = UDim.new(0, 12)
-    FrameCorner.Parent = MainFrame
-
-    local FrameStroke = Instance.new("UIStroke")
-    FrameStroke.Color = Color3.fromRGB(50, 50, 65)
-    FrameStroke.Thickness = 2
-    FrameStroke.Transparency = 0.5
-    FrameStroke.Parent = MainFrame
-
-    local TitleLabel = Instance.new("TextLabel")
-    TitleLabel.Name = "TitleLabel"
-    TitleLabel.Size = UDim2.new(1, 0, 0.2, 0)
-    TitleLabel.Position = UDim2.new(0, 0, 0.05, 0)
-    TitleLabel.BackgroundTransparency = 1
-    TitleLabel.Text = "ACCOUNT SEED BALANCE"
-    TitleLabel.TextColor3 = Color3.fromRGB(150, 150, 170)
-    TitleLabel.Font = Enum.Font.GothamBold
-    TitleLabel.TextSize = 24
-    TitleLabel.TextScaled = true
-    TitleLabel.Parent = MainFrame
-
-    local SeedsLabel = Instance.new("TextLabel")
-    SeedsLabel.Name = "SeedsLabel"
-    SeedsLabel.Size = UDim2.new(0.9, 0, 0.5, 0)
-    SeedsLabel.Position = UDim2.new(0.05, 0, 0.3, 0)
-    SeedsLabel.BackgroundTransparency = 1
-    SeedsLabel.TextColor3 = Color3.fromRGB(100, 230, 120)
-    SeedsLabel.Font = Enum.Font.GothamBlack
-    SeedsLabel.TextSize = 64
-    SeedsLabel.TextScaled = true
-    SeedsLabel.Parent = MainFrame
-
-    local function updateSeedsDisplay(currentValue)
-        if currentValue then
-            SeedsLabel.Text = tostring(currentValue) .. " 🌱"
-        else
-            SeedsLabel.Text = "0 🌱"
+local function optimizeMemory()
+    local BLANK_TEXTURE = "rbxassetid://924320031" 
+    pcall(function()
+        for _, asset in ipairs(Workspace:GetDescendants()) do
+            if asset:IsA("Decal") or asset:IsA("Texture") then
+                asset.Texture = BLANK_TEXTURE
+            elseif asset:IsA("MeshPart") then
+                asset.RenderFidelity = Enum.RenderFidelity.Performance
+            elseif asset:IsA("SpecialMesh") then
+                asset.TextureId = ""
+            end
         end
-    end
-
-    if seedsValue then
-        updateSeedsDisplay(seedsValue.Value)
-        seedsValue.Changed:Connect(function(newValue)
-            updateSeedsDisplay(newValue)
-        end)
-    else
-        SeedsLabel.Text = "Seeds Data Missing"
-        SeedsLabel.TextColor3 = Color3.fromRGB(240, 100, 100)
-    end
+    end)
 end
 
--- ==================== UNIT COORDINATES CONFIGURATION ====================
-local unitSequence = {
-    [0] = {Name = "unit_evolution_flower", UI_Name = "Evolution Flower", X = 126.96971893310547, Y = -31.568737030029297, Z = -62.97926712036133},  -- Flower 1
-    [1] = {Name = "unit_evolution_flower", UI_Name = "Evolution Flower", X = 131.2655487060547,  Y = -31.568737030029297, Z = -62.034400939941406}, -- Flower 2
-    [2] = {Name = "unit_jelly_shroom",      UI_Name = "Jelly Shroom",     X = 135.3177490234375, Y = -31.568737030029297, Z = -68.40625},           -- Shroom 1
-    [3] = {Name = "unit_jelly_shroom",      UI_Name = "Jelly Shroom",     X = 131.51931762695312, Y = -31.568737030029297, Z = -69.8414535522461}   -- Shroom 2
+local function optimizeCPU()
+    pcall(function()
+        settings().Physics.PhysicsEnvironmentalThrottle = Enum.EnviromentalPhysicsThrottle.DefaultAuto
+        for _, part in ipairs(Workspace:GetDescendants()) do
+            if part:IsA("BasePart") and not part.Anchored then
+                part.CollisionFidelity = Enum.CollisionFidelity.Box
+                part.ReceiveAge = 10 
+            end
+        end
+    end)
+end
+
+local function instantSkipWaves()
+    if skipWavesToggled then return end
+    pcall(function()
+        local RF = game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions")
+        if RF:FindFirstChild("SkipWave") then
+            RF.SkipWave:InvokeServer()
+            skipWavesToggled = true
+            return
+        end
+        local autoSkipBtn = LocalPlayer.PlayerGui:FindFirstChild("GameGuiNoInset") 
+            and LocalPlayer.PlayerGui.GameGuiNoInset.Screen.Top.WaveControls
+            and LocalPlayer.PlayerGui.GameGuiNoInset.Screen.Top.WaveControls:FindFirstChild("AutoSkip")
+        if autoSkipBtn then
+            clickButton(autoSkipBtn)
+            skipWavesToggled = true
+        end
+    end)
+end
+
+local function startAutoCleanup()
+    task.spawn(function()
+        while true do
+            adaptiveWait(7.5)
+            if game.PlaceId ~= LOBBY_PLACE_ID then
+                collectgarbage("collect")
+            end
+        end
+    end)
+end
+
+local function monitorGameState()
+    task.spawn(function()
+        while true do
+            adaptiveWait(0.5)
+            if game.PlaceId ~= LOBBY_PLACE_ID then
+                if not optimizationsApplied then
+                    pcall(disable3DRendering)
+                    pcall(optimizeGPU)
+                    pcall(optimizeMemory)
+                    pcall(optimizeCPU)
+                    optimizationsApplied = true
+                end
+                if not skipWavesToggled then
+                    adaptiveWait(0.25)
+                    instantSkipWaves()
+                end
+            else
+                if optimizationsApplied then
+                    pcall(function() RunService:Set3dRenderingEnabled(true) end)
+                    optimizationsApplied = false
+                    skipWavesToggled = false
+                end
+            end
+        end
+    end)
+end
+
+-- ==================== VOLCANO MAP UNIT CONFIGURATION ====================
+local baseRot = {-1, 0, -8.742277657347586e-08, 0, 1, 0, 8.742277657347586e-08, 0, -1}
+
+local volcanoSequence = {
+    [0]  = {Type = "XYZ", Name = "unit_trident",      UI_Name = "Trident",      X = 112.73947906494, Y = -31.568737030029, Z = -67.092147827148, RotMatrix = baseRot},
+    [1]  = {Type = "XYZ", Name = "unit_trident",      UI_Name = "Trident",      X = 113.79557800293, Y = -31.568737030029, Z = -73.515754699707, RotMatrix = baseRot},
+    [2]  = {Type = "XYZ", Name = "unit_trident",      UI_Name = "Trident",      X = 118.06793212891, Y = -31.568737030029, Z = -66.218704223633, RotMatrix = baseRot},
+    [3]  = {Type = "XYZ", Name = "unit_beehive",      UI_Name = "Beehive",      X = 123.99767303467, Y = -31.568737030029, Z = -74.845344543457, RotMatrix = baseRot},
+    [4]  = {Type = "XYZ", Name = "unit_beehive",      UI_Name = "Beehive",      X = 124.32364654541, Y = -31.568737030029, Z = -79.693321228027, RotMatrix = baseRot},
+    [5]  = {Type = "XYZ", Name = "unit_beehive",      UI_Name = "Beehive",      X = 124.32364654541, Y = -31.568737030029, Z = -79.693321228027, RotMatrix = baseRot},
+    [6]  = {Type = "XYZ", Name = "unit_spellbook",    UI_Name = "Spellbook",    X = 139.41645812988, Y = -31.568737030029, Z = -47.252170562744, RotMatrix = baseRot},
+    [7]  = {Type = "XYZ", Name = "unit_spellbook",    UI_Name = "Spellbook",    X = 132.94451904297, Y = -31.568737030029, Z = -51.485469818115, RotMatrix = baseRot},
+    [8]  = {Type = "XYZ", Name = "unit_spellbook",    UI_Name = "Spellbook",    X = 139.32550048828, Y = -31.568737030029, Z = -53.69588470459,  RotMatrix = baseRot},
+    [9]  = {Type = "XYZ", Name = "unit_well",         UI_Name = "Well",         X = 132.30061340332, Y = -31.568737030029, Z = -82.880432128906, RotMatrix = baseRot},
+    [10] = {Type = "XYZ", Name = "unit_axolotl_cave", UI_Name = "Axolotl Cave", X = 126.50084686279, Y = -31.568737030029, Z = -85.350357055664, RotMatrix = baseRot},
+    [11] = {Type = "XYZ", Name = "unit_castle",       UI_Name = "Castle",       X = 129.38656616211, Y = -31.568737030029, Z = -90.320648193359, RotMatrix = baseRot},
+    [12] = {Type = "XYZ", Name = "unit_seed_wing",    UI_Name = "Seed Wing",    X = 136.13293457031, Y = -31.568737030029, Z = -88.00146484375,  RotMatrix = baseRot},
+    [13] = {Type = "XYZ", Name = "unit_seed_wing",    UI_Name = "Seed Wing",    X = 139.34870910645, Y = -31.568737030029, Z = -87.381797790527, RotMatrix = baseRot},
+    [14] = {Type = "XYZ", Name = "unit_seed_wing",    UI_Name = "Seed Wing",    X = 139.15034484863, Y = -31.568737030029, Z = -84.941253662109, RotMatrix = baseRot},
+    [15] = {Type = "XYZ", Name = "unit_seed_wing",    UI_Name = "Seed Wing",    X = 137.88131713867, Y = -31.568737030029, Z = -82.536392211914, RotMatrix = baseRot},
+    [16] = {Type = "XYZ", Name = "unit_seed_wing",    UI_Name = "Seed Wing",    X = 136.07510375977, Y = -31.568737030029, Z = -79.58366394043,  RotMatrix = baseRot}
 }
 
 local placementRandom = Random.new()
-
 local function getRandomizedConfig(unitData)
+    local m = unitData.RotMatrix
+
+    -- 5% Position Variation applied to all units
     local xVar = math.abs(unitData.X) * 0.05
-    local yVar = math.abs(unitData.Y) * 0.05
     local zVar = math.abs(unitData.Z) * 0.05
-
-    local finalX = unitData.X + placementRandom:NextNumber(-xVar, xVar)
-    local finalY = unitData.Y + placementRandom:NextNumber(-yVar, yVar)
-    local finalZ = unitData.Z + placementRandom:NextNumber(-zVar, zVar)
-
+    
+    local fX = unitData.X + placementRandom:NextNumber(-xVar, xVar)
+    local fY = unitData.Y
+    local fZ = unitData.Z + placementRandom:NextNumber(-zVar, zVar)
+    
     return {
-        CF = CFrame.new(finalX, finalY, finalZ, -1, 0, -8.742277657347586e-08, 0, 1, 0, 8.742277657347586e-08, 0, -1),
-        Rotation = 180,
-        Valid = true,
-        Position = vector.create(finalX, finalY, finalZ)
+        CF = CFrame.new(fX, fY, fZ, m[1], m[2], m[3], m[4], m[5], m[6], m[7], m[8], m[9]), 
+        Rotation = 180, 
+        Valid = true, 
+        WasFastPlaced = true,
+        Position = vector.create(fX, fY, fZ)
     }
 end
 
--- Lobby: Auto Teleport Loop
+-- ==================== AUTOMATION LOOPS ====================
 if autojoinmap then
     task.spawn(function()
+        local targetPos = Vector3.new(89, 65, 787)
+        local previousCFrame = nil
+
         while autojoinmap do
-            if game.PlaceId == 108533757090220 then
-                local char = LocalPlayer.Character
-                if char and char:FindFirstChild("HumanoidRootPart") then
-                    char.HumanoidRootPart.CFrame = CFrame.new(154, 67, 786)
+            if game.PlaceId == LOBBY_PLACE_ID then
+                pcall(function()
+                    local char = LocalPlayer.Character
+                    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                    if hrp then
+                        -- Save position before teleporting if not already at destination
+                        if (hrp.Position - targetPos).Magnitude > 5 then
+                            previousCFrame = hrp.CFrame
+                        end
+
+                        -- Direct Teleport to destination
+                        hrp.CFrame = CFrame.new(targetPos)
+                    end
+                end)
+
+                -- Check every 10 seconds to see if character joined or is still in lobby
+                task.wait(10)
+
+                -- If still in lobby after 10 seconds, teleport back to previous position and retry destination
+                if game.PlaceId == LOBBY_PLACE_ID then
+                    pcall(function()
+                        local char = LocalPlayer.Character
+                        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                        if hrp then
+                            -- Teleport back to the original place before destination
+                            if previousCFrame then
+                                hrp.CFrame = previousCFrame
+                            else
+                                hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 0, -10))
+                            end
+
+                            task.wait(0.3)
+
+                            -- Teleport back to destination
+                            hrp.CFrame = CFrame.new(targetPos)
+                        end
+                    end)
                 end
+            else
+                task.wait(1)
             end
-            task.wait(1)
         end
     end)
 end
 
--- Lobby: Auto Join Farm Map Loop (With Private Lobby Enforcement)
-if autojoindojo then
+-- Join Volcano Map exclusively
+if autoselectmap then
     task.spawn(function()
-        while autojoindojo do
-            if game.PlaceId == 108533757090220 then
+        while autoselectmap do
+            if game.PlaceId == LOBBY_PLACE_ID then
                 pcall(function()
                     local RF = game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions")
-                    RF.LobbySetMap_8:InvokeServer("map_volcano", "dif_hell", false)
-                    task.wait(0.1)
-                    RF.LobbySetMaxPlayers_8:InvokeServer(1)
-                    task.wait(0.1)
-                    RF.StartLobby_8:InvokeServer()
+                    
+                    local setMapFunc = RF:FindFirstChild("LobbySetMap_20") or RF:FindFirstChild("LobbySetMap_20") or RF:FindFirstChild("LobbySetMap_20")
+                    local setMaxPlayersFunc = RF:FindFirstChild("LobbySetMaxPlayers_20") or RF:FindFirstChild("LobbySetMaxPlayers_20") or RF:FindFirstChild("LobbySetMaxPlayers_20")
+                    local startLobbyFunc = RF:FindFirstChild("StartLobby_20") or RF:FindFirstChild("StartLobby_20") or RF:FindFirstChild("StartLobby_20")
+                    
+                    if setMapFunc then
+                        setMapFunc:InvokeServer("map_volcano", "dif_impossible", false)
+                    end
+                    adaptiveWait(0.025)
+                    if setMaxPlayersFunc then
+                        setMaxPlayersFunc:InvokeServer(1)
+                    end
+                    adaptiveWait(0.025)
+                    if startLobbyFunc then
+                        startLobbyFunc:InvokeServer()
+                    end
                 end)
             end
-            task.wait(1)
+            adaptiveWait(0.25)
         end
     end)
 end
 
--- ==================== REMOTE AUTO DIFFICULTY ====================
+-- Force Impossible Difficulty
 if autodifficulty then
     task.spawn(function()
         while autodifficulty do
-            if game.PlaceId ~= 108533757090220 and not hasVotedDifficulty then
-                pcall(function()
-                    local args = { "dif_hell" }
-                    game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("PlaceDifficultyVote"):InvokeServer(unpack(args))
+            if game.PlaceId ~= LOBBY_PLACE_ID and not hasVotedDifficulty then
+                pcall(function() 
+                    game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("PlaceDifficultyVote"):InvokeServer("dif_impossible")
                     hasVotedDifficulty = true 
                 end)
             end
-            task.wait(0.5) 
+            adaptiveWait(0.125)
         end
     end)
 end
 
--- ==================== GUI AUTO SPEED MULTIPLIER ====================
 if autospeedchange then
     task.spawn(function()
         while autospeedchange do
-            if game.PlaceId ~= 108533757090220 then
-                pcall(function()
-                    local waveControls = LocalPlayer.PlayerGui:FindFirstChild("GameGuiNoInset", true)
-                        and LocalPlayer.PlayerGui.GameGuiNoInset:FindFirstChild("Screen", true)
-                        and LocalPlayer.PlayerGui.GameGuiNoInset.Screen:FindFirstChild("Top", true)
-                        and LocalPlayer.PlayerGui.GameGuiNoInset.Screen.Top:FindFirstChild("WaveControls", true)
-
-                    if waveControls then
-                        local tickSpeed = waveControls:FindFirstChild("TickSpeed")
-                        -- Target path changed back to UI index '3' for premium x3 speed validation
-                        local speed3 = tickSpeed and tickSpeed:FindFirstChild("Items", true) and tickSpeed.Items:FindFirstChild("3")
-                        if speed3 then
-                            local uistroke = speed3:FindFirstChildOfClass("UIStroke")
-                            if uistroke and uistroke.Color == Color3.fromRGB(58, 58, 58) then
-                                clickButton(speed3)
-                                task.wait(2)
-                            end
-                        end
-                    end
+            if game.PlaceId ~= LOBBY_PLACE_ID and not hasToggledSpeed then
+                local success = pcall(function() 
+                    game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("ChangeTickSpeed"):InvokeServer(3) 
                 end)
+                if success then hasToggledSpeed = true end
             end
-            task.wait(2)
+            adaptiveWait(0.25)
         end
     end)
 end
 
--- ==================== GUI AUTO SKIP WAVES ====================
 if autoskipwaves then
     task.spawn(function()
         while autoskipwaves do
-            if game.PlaceId ~= 108533757090220 then
-                pcall(function()
-                    local waveControls = LocalPlayer.PlayerGui:FindFirstChild("GameGuiNoInset", true)
-                        and LocalPlayer.PlayerGui.GameGuiNoInset:FindFirstChild("Screen", true)
-                        and LocalPlayer.PlayerGui.GameGuiNoInset.Screen:FindFirstChild("Top", true)
-                        and LocalPlayer.PlayerGui.GameGuiNoInset.Screen.Top:FindFirstChild("WaveControls", true)
-
-                    if waveControls then
-                        local autoSkip = waveControls:FindFirstChild("AutoSkip")
-                        if autoSkip then
-                            local uistroke = autoSkip:FindFirstChildOfClass("UIStroke")
-                            if uistroke and uistroke.Color == Color3.fromRGB(43, 28, 0) then
-                                clickButton(autoSkip)
-                                task.wait(2)
+            if game.PlaceId ~= LOBBY_PLACE_ID then
+                if not hasEverToggledSkipThisSession and not hasToggledSkip then
+                    if skipDelayTimer < 20 then
+                        skipDelayTimer = skipDelayTimer + 1 
+                    else
+                        pcall(function()
+                            local autoSkipBtn = LocalPlayer.PlayerGui:FindFirstChild("GameGuiNoInset") and LocalPlayer.PlayerGui.GameGuiNoInset.Screen.Top.WaveControls:FindFirstChild("AutoSkip")
+                            if autoSkipBtn then 
+                                clickButton(autoSkipBtn)
+                                hasToggledSkip = true
+                                hasEverToggledSkipThisSession = true
+                                skipDelayTimer = 0 
                             end
-                        end
+                        end)
                     end
-                end)
+                end
+            else 
+                skipDelayTimer = 0 
             end
-            task.wait(1.5)
+            adaptiveWait(0.25)
         end
     end)
 end
 
--- ==================== OPTIMIZED: GAMEPAD VANISH TIMING LOGIC + WEBHOOK TRIGGER ====================
+if autoCloseUnitViewer then
+    task.spawn(function()
+        while autoCloseUnitViewer do
+            if game.PlaceId ~= LOBBY_PLACE_ID then
+                pcall(function() clickButton(LocalPlayer.PlayerGui.GameGui.Screen.Bottom.UnitViewer.Close) end)
+            end
+            adaptiveWait(1.25)
+        end
+    end)
+end
+
+local function initiateAggressiveRestart()
+    if isSpammingRestart then return end
+    isSpammingRestart = true
+    isTeleporting = true
+    task.spawn(function()
+        while isSpammingRestart and game.PlaceId ~= LOBBY_PLACE_ID do
+            pcall(function() clickButton(LocalPlayer.PlayerGui.GameGui.Screen.Middle.GameEnd.Items.Frame.Actions.Items.Again) end)
+            if getCurrentUnitsCount() == 0 then isSpammingRestart = false; break end
+            adaptiveWait(0.05)
+        end
+        isTeleporting = false
+        hasVotedDifficulty = false
+        setupCompletedThisRound = false
+        processedMatchThisRound = false
+        maxUnitsReachedThisRound = 0
+        hasToggledSpeed = false
+        hasToggledSkip = false
+        skipDelayTimer = 0
+    end)
+end
+
+-- GameEnd UI Screen Detection Restart
 if autorestart then
     task.spawn(function()
         while autorestart do
             pcall(function()
-                if LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui") then
-                    
-                    local screen = LocalPlayer.PlayerGui:FindFirstChild("GameGui") and LocalPlayer.PlayerGui.GameGui:FindFirstChild("Screen")
-                    local middle = screen and screen:FindFirstChild("Middle")
-                    local gameEnd = middle and middle:FindFirstChild("GameEnd")
-                    local items = gameEnd and gameEnd:FindFirstChild("Items")
-                    local frame = items and items:FindFirstChild("Frame")
-                    local actions = frame and frame:FindFirstChild("Actions")
-                    local itemsSub = actions and actions:FindFirstChild("Items")
-                    local againBtn = itemsSub and itemsSub:FindFirstChild("Again")
-                    local gamepadButton = againBtn and againBtn:FindFirstChild("GamepadButton")
-
-                    if gamepadButton then
-                        -- Round is Over, fire webhook exactly once
-                        if not hasSentWebhookThisRound then
-                            hasSentWebhookThisRound = true
-                            task.spawn(sendMatchStatsToDiscord)
+                if LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui") and not isSpammingRestart then
+                    local againBtn = LocalPlayer.PlayerGui.GameGui.Screen.Middle.GameEnd.Items.Frame.Actions.Items.Again
+                    if againBtn and againBtn:FindFirstChild("GamepadButton") then 
+                        if not processedMatchThisRound then
+                            processedMatchThisRound = true
+                            totalMatchesFinished = totalMatchesFinished + 1
+                            sessionMatchesFinished = sessionMatchesFinished + 1
+                            updateMatchCounterUI()
+                            print("🏆 Match finished (GameEnd Screen)! Session: " .. sessionMatchesFinished .. "/" .. targetMatchLimit .. " | Total: " .. totalMatchesFinished)
                         end
-
-                        if not isTeleporting then
-                            isTeleporting = true
-                            clickButton(againBtn)
-                        end
-                    else
-                        if isTeleporting then
-                            task.wait(0.5)
-                            isTeleporting = false
-                            hasVotedDifficulty = false 
-                            hasSentWebhookThisRound = false -- Reset state array flags for next level cycle
-                            timeInAfk = 0
+                        
+                        if not checkMatchLimitAndTeleport() then
+                            initiateAggressiveRestart()
                         end
                     end
                 end
             end)
-            task.wait(0.1) 
+            adaptiveWait(0.025)
         end
     end)
 end
 
--- ==================== SMART SCRIPTED PLACEMENT INTERACTION ====================
+-- ==================== UNIT PLACEMENT & UPGRADE ENGINE ====================
 if autowindojo then
     task.spawn(function()
         while autowindojo do
-            if game.PlaceId ~= 108533757090220 then
+            if game.PlaceId ~= LOBBY_PLACE_ID and not isSpammingRestart then
                 pcall(function()
-                    local unitsLabel = LocalPlayer.PlayerGui:FindFirstChild("GameGui") 
-                        and LocalPlayer.PlayerGui.GameGui:FindFirstChild("Screen")
-                        and LocalPlayer.PlayerGui.GameGui.Screen:FindFirstChild("Bottom")
-                        and LocalPlayer.PlayerGui.GameGui.Screen.Bottom:FindFirstChild("Units")
+                    local currentUnits = getCurrentUnitsCount()
+                    if currentUnits then
+                        local targetUnitCount = 17
 
-                    if unitsLabel and (unitsLabel:IsA("TextLabel") or unitsLabel:IsA("TextBox")) then
-                        local cleanText = string.gsub(unitsLabel.Text, "%s+", "")
-                        local currentUnits = tonumber(string.match(cleanText, "^(%d+)"))
-
-                        if not currentUnits and cleanText ~= "" then
-                            currentUnits = tonumber(cleanText)
+                        if currentUnits > maxUnitsReachedThisRound then 
+                            maxUnitsReachedThisRound = currentUnits 
+                        end
+                        
+                        -- Match completion via Unit Loss / Map Clear
+                        if maxUnitsReachedThisRound >= targetUnitCount and currentUnits < maxUnitsReachedThisRound then
+                            if not processedMatchThisRound then
+                                processedMatchThisRound = true
+                                totalMatchesFinished = totalMatchesFinished + 1
+                                sessionMatchesFinished = sessionMatchesFinished + 1
+                                updateMatchCounterUI()
+                                print("🏆 Match finished (Units Cleared)! Session: " .. sessionMatchesFinished .. "/" .. targetMatchLimit .. " | Total: " .. totalMatchesFinished)
+                            end
+                            
+                            if not checkMatchLimitAndTeleport() then
+                                initiateAggressiveRestart()
+                            end
+                            return
                         end
 
-                        if currentUnits and unitSequence[currentUnits] then
-                            local targetUnit = unitSequence[currentUnits]
+                        -- Step 2: Start upgrading only when all 17 units are placed
+                        if currentUnits >= targetUnitCount then
+                            setupCompletedThisRound = true
+                            game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("UpgradeAll"):InvokeServer()
+                            return
+                        end
+
+                        -- Step 1: Place all 17 units sequentially
+                        if currentUnits < targetUnitCount and volcanoSequence[currentUnits] then
+                            local targetUnit = volcanoSequence[currentUnits]
                             
-                            local hotbar = LocalPlayer.PlayerGui.GameGui.Screen.Bottom:FindFirstChild("Inventory") 
-                                and LocalPlayer.PlayerGui.GameGui.Screen.Bottom.Inventory:FindFirstChild("Items")
+                            quickMoveToDestination(targetUnit.X, targetUnit.Y + 2, targetUnit.Z)
+                            adaptiveWait(0.05)
                             
+                            local hotbar = LocalPlayer.PlayerGui.GameGui.Screen.Bottom:FindFirstChild("Inventory") and LocalPlayer.PlayerGui.GameGui.Screen.Bottom.Inventory:FindFirstChild("Items")
                             if hotbar then
                                 local card = hotbar:FindFirstChild(targetUnit.Name) or hotbar:FindFirstChild(targetUnit.UI_Name)
-                                if card then
+                                if card then 
                                     clickButton(card)
-                                    task.wait(0.05)
+                                    adaptiveWait(0.0125)
                                 end
                             end
-
-                            local randomizedConfig = getRandomizedConfig(targetUnit)
-                            local args = { targetUnit.Name, randomizedConfig }
                             
-                            game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("PlaceUnit"):InvokeServer(unpack(args))
+                            game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("PlaceUnit"):InvokeServer(targetUnit.Name, getRandomizedConfig(targetUnit))
+                            adaptiveWait(0.1)
                         end
                     end
                 end)
             end
-            task.wait(0.4)
+            adaptiveWait(0.1)
         end
     end)
 end
 
--- ==================== AUTO UPGRADE ENGINE ====================
-if autoupgrade then
+-- ==================== SEEDS TRACKER + MATCH COUNTER + MAP DISPLAY GUI ====================
+if autoseedstracker then
     task.spawn(function()
-        while autoupgrade do
-            if game.PlaceId ~= 108533757090220 then
-                pcall(function()
-                    game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("UpgradeAll"):InvokeServer()
-                end)
+        local seedsValue = LocalPlayer:WaitForChild("leaderstats", 10) and LocalPlayer.leaderstats:WaitForChild("Seeds", 10)
+        local oldGui = LocalPlayer:WaitForChild("PlayerGui"):FindFirstChild("SeedsTrackerGui")
+        if oldGui then oldGui:Destroy() end
+        
+        local Gui = Instance.new("ScreenGui"); Gui.Name = "SeedsTrackerGui"; Gui.ResetOnSpawn = false; Gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+        local Frame = Instance.new("Frame"); Frame.Size = UDim2.new(0.5,0,0.55,0); Frame.Position = UDim2.new(0.25,0,0.225,0); Frame.BackgroundColor3 = Color3.fromRGB(25,25,35); Frame.BackgroundTransparency = 0.8; Frame.Parent = Gui
+        Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 12)
+        
+        -- Top Display: Seeds Counter
+        local Label = Instance.new("TextLabel"); Label.Size = UDim2.new(0.9,0,0.35,0); Label.Position = UDim2.new(0.05,0,0.05,0); Label.BackgroundTransparency = 1; Label.TextColor3 = Color3.fromRGB(100,230,120); Label.Font = Enum.Font.GothamBlack; Label.TextSize = 56; Label.TextScaled = true; Label.Parent = Frame
+        
+        -- Middle Display: Matches Finished Label
+        matchesFinishedLabel = Instance.new("TextLabel")
+        matchesFinishedLabel.Name = "MatchesFinishedLabel"
+        matchesFinishedLabel.Size = UDim2.new(0.9,0,0.25,0)
+        matchesFinishedLabel.Position = UDim2.new(0.05,0,0.40,0)
+        matchesFinishedLabel.BackgroundTransparency = 1
+        matchesFinishedLabel.TextColor3 = Color3.fromRGB(255,255,255)
+        matchesFinishedLabel.Font = Enum.Font.GothamBold
+        matchesFinishedLabel.TextSize = 32
+        matchesFinishedLabel.TextScaled = true
+        matchesFinishedLabel.Parent = Frame
+
+        -- Bottom Display: Current Map Label
+        currentMapLabel = Instance.new("TextLabel")
+        currentMapLabel.Name = "CurrentMapLabel"
+        currentMapLabel.Size = UDim2.new(0.9,0,0.25,0)
+        currentMapLabel.Position = UDim2.new(0.05,0,0.68,0)
+        currentMapLabel.BackgroundTransparency = 1
+        currentMapLabel.TextColor3 = Color3.fromRGB(255,120,80)
+        currentMapLabel.Font = Enum.Font.GothamBold
+        currentMapLabel.TextSize = 28
+        currentMapLabel.TextScaled = true
+        currentMapLabel.Text = "Map: Lobby"
+        currentMapLabel.Parent = Frame
+        
+        updateMatchCounterUI()
+
+        local function update(v) Label.Text = v and (v.." 🌱") or "0 🌱" end
+        if seedsValue then update(seedsValue.Value); seedsValue.Changed:Connect(update) else Label.Text = "Seeds Data Missing"; Label.TextColor3 = Color3.fromRGB(240,100,100) end
+
+        -- Dynamic Map GUI Update Loop
+        task.spawn(function()
+            while true do
+                if currentMapLabel then
+                    if game.PlaceId == LOBBY_PLACE_ID then
+                        currentMapLabel.Text = "Map: Lobby"
+                    else
+                        currentMapLabel.Text = "Map: Volcano 🌋"
+                    end
+                end
+                adaptiveWait(0.5)
             end
-            task.wait(2)
-        end
+        end)
     end)
 end
 
--- Lobby Reset Fallback
+if autolowgraphics then
+    task.spawn(function()
+        local function applyOnce() 
+            pcall(function() 
+                game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("ChangeSetting"):InvokeServer("st_graphics", 2) 
+            end) 
+        end
+        if LocalPlayer and LocalPlayer.Character then applyOnce() else LocalPlayer.CharacterAdded:Wait(); applyOnce() end
+    end)
+end
+
+-- Global Reset on Lobby Return
 task.spawn(function()
     while true do
-        if game.PlaceId == 108533757090220 then
+        if game.PlaceId == LOBBY_PLACE_ID then
             isTeleporting = false
             hasVotedDifficulty = false
-            hasSentWebhookThisRound = false
+            setupCompletedThisRound = false
+            processedMatchThisRound = false
+            maxUnitsReachedThisRound = 0
+            isSpammingRestart = false
+            hasToggledSpeed = false
+            hasToggledSkip = false
+            skipDelayTimer = 0
+            
+            -- Reset session counter and set new random limit (6-9) when entering lobby
+            if sessionMatchesFinished > 0 then
+                sessionMatchesFinished = 0
+                targetMatchLimit = math.random(20, 30)
+                updateMatchCounterUI()
+                print("🎲 Lobby joined. Session count reset & new test limit assigned: " .. targetMatchLimit)
+            end
         end
-        task.wait(2)
+        adaptiveWait(0.5)
     end
 end)
 
--- ==================== RUNTIME SYSTEM INITIALIZER ====================
-if autoseedstracker then
-    task.spawn(initializeSeedsTracker)
-end
+-- ==================== EXECUTION START ====================
+startAntiAfk()
+startAutoCleanup()
+monitorGameState()
 
-print("✅ GTD VOLCANO FARM SCRIPT - WEBHOOK MONITOR ACTIVE")
+print("✅ GTD VOLCANO ONLY FARM SCRIPT LOADED")
+print("✅ Seeds Tracker, Session Counter & Map Display Active (Test Limit: " .. targetMatchLimit .. ")")
+print("✅ Dual Win/Match Reset & Auto Teleport Integrated")
