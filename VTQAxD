@@ -1,7 +1,7 @@
 task.wait(3)
 -- ==================== GTD FARM SCRIPT + PERFORMANCE OPTIMIZER ====================
 -- UNIFIED: 5FPS Optimized Farm Automation + Complete Performance Tweaks
--- SINGLE-MAP MODE: Volcano Map Only ("map_volcano" - Impossible Difficulty)
+-- SINGLE-MAP MODE: Volcano Map Only ("map_volcano" - Insane Difficulty)
 local currentversion = "Garden Tower Defense-VTQAxD-5FPS-VOLCANO-ONLY"
 
 -- ==================== VECTOR HANDLER ====================
@@ -400,7 +400,7 @@ if autoselectmap then
                     local startLobbyFunc = RF:FindFirstChild("StartLobby_14") or RF:FindFirstChild("StartLobby_14") or RF:FindFirstChild("StartLobby_14")
                     
                     if setMapFunc then
-                        setMapFunc:InvokeServer("map_volcano", "dif_impossible", false)
+                        setMapFunc:InvokeServer("map_volcano", "dif_insane", false)
                     end
                     adaptiveWait(0.025)
                     if setMaxPlayersFunc then
@@ -423,7 +423,7 @@ if autodifficulty then
         while autodifficulty do
             if game.PlaceId ~= LOBBY_PLACE_ID and not hasVotedDifficulty then
                 pcall(function() 
-                    game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("PlaceDifficultyVote"):InvokeServer("dif_impossible")
+                    game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunctions"):WaitForChild("PlaceDifficultyVote"):InvokeServer("dif_insane")
                     hasVotedDifficulty = true 
                 end)
             end
