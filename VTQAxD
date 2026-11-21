@@ -782,7 +782,35 @@ if autowindojo then
 
                         if not cache.remotes.placeUnit then refreshRemoteCache() end
                         if cache.remotes.placeUnit then
-                            cache.remotes.placeUnit:InvokeServer(targetUnit.Name, getRandomizedConfig(targetUnit))
+                            -- Inner pcall so placement failures are visible (outer pcall swallows them otherwise).
+                            local placedOk, cfgOrErr = pcall(function()
+                                local cfg = getRandomizedConfig(targetUnit)
+                                cache.remotes.placeUnit:InvokeServer(targetUnit.Name, cfg)
+                                return cfg
+                            end)
+
+                            if placedOk then
+                                local p = cfgOrErr and cfgOrErr.Position or placeConfig.Position
+                                print(string.format(
+                                    "[Unit %d/%d] Placed %s at (%.2f, %.2f, %.2f)",
+                                    currentUnits + 1, targetUnitCount,
+                                    targetUnit.UI_Name,
+                                    p and p.X or targetUnit.X,
+                                    p and p.Y or targetUnit.Y,
+                                    p and p.Z or targetUnit.Z
+                                ))
+                            else
+                                warn(string.format(
+                                    "[Unit %d/%d] FAILED to place %s — error: %s",
+                                    currentUnits + 1, targetUnitCount,
+                                    targetUnit.UI_Name, tostring(cfgOrErr)
+                                ))
+                            end
+                        else
+                            warn(string.format(
+                                "[Unit %d/%d] SKIPPED %s — placeUnit remote missing",
+                                currentUnits + 1, targetUnitCount, targetUnit.UI_Name
+                            ))
                         end
                         adaptiveWait(0.12)
                     end
@@ -868,13 +896,28 @@ if autoseedstracker then
     end)
 end
 
+-- ==================== GRAPHICS (LOBBY ONLY) ====================
+-- Only touch graphics while in the lobby. If the character has already
+-- joined a game (PlaceId ~= LOBBY_PLACE_ID), skip the change entirely.
 if autolowgraphics then
     task.spawn(function()
+        if game.PlaceId ~= LOBBY_PLACE_ID then
+            print("[Graphics] Already in-game — skipping graphics change.")
+            return
+        end
+
         if not cache.remotes.changeSetting then refreshRemoteCache() end
         if cache.remotes.changeSetting then
-            pcall(function()
+            local ok, err = pcall(function()
                 cache.remotes.changeSetting:InvokeServer("st_graphics", 2)
             end)
+            if ok then
+                print("[Graphics] Set st_graphics -> 2 (medium) in lobby.")
+            else
+                warn("[Graphics] Failed to change graphics: " .. tostring(err))
+            end
+        else
+            warn("[Graphics] changeSetting remote not available.")
         end
     end)
 end
@@ -909,3 +952,5 @@ print("✅ Join pad (fixed): " .. tostring(JOIN_PAD_POS) .. " — UI clicks hand
 print("✅ Axolotl Cave and Castle skipped; target = 13 units")
 print("✅ Join fail-safe: Bounce via (" .. tostring(BOUNCE_POS) .. ") → back to pad")
 print("✅ AutoUpgrade: one-shot AutoUpgradeAll toggle after all 13 units placed")
+print("✅ Graphics: only changed while in lobby (skipped if already in-game)")
+print("✅ Unit placement: success/error logged per unit")
