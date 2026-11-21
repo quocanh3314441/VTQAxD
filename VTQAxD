@@ -1,4 +1,4 @@
-task.wait(2)
+task.wait(15)
 -- ==================== GTD FARM SCRIPT + PERFORMANCE OPTIMIZER ====================
 -- UNIFIED: 5FPS Optimized Farm Automation + Complete Performance Tweaks
 -- SINGLE-MAP MODE: Halloween Event Map (dif_insane, night variant)
